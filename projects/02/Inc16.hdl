@@ -1,0 +1,35 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/02/Inc16.hdl
+/**
+ * 16-bit incrementer:
+ * out = in + 1
+ */
+CHIP Inc16 {
+    IN in[16];
+    OUT out[16];
+
+    PARTS:
+    /* Obvious but unoptimized */
+    // Add16(a=in, b[0]=true, b[1..15]=false, out=out);
+
+
+    /* From the ALU table */
+    /* Not x = 2^n -1 -x */
+    Not16 (in=in,         out=nx);
+    /* Not x + 2^n -1 = -2-x */
+    Add16 (a=nx, b=true, out=sum);
+    /* Not ( Not + 2^n -1) = Not (-2-x) = 2^n -1 -(-2-x) = x+1 */
+    Not16 (in=sum,       out=out);
+
+    /* if for loop was available */
+    /*
+    carry[0]=1;
+    for i in 0..15 do
+        Xor(a=in[i], b=carry[i], out=out[i]);
+        And(a=in[i], b=carry[i], out=carry[i+1]);
+    done
+    */
+
+}

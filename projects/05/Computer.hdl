@@ -1,0 +1,45 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/05/Computer.hdl
+/**
+ * The Hack computer, consisting of CPU, ROM and RAM.
+ * When reset is 0, the program stored in the ROM executes.
+ * When reset is 1, the program's execution restarts. 
+ * Thus, to start running the currently loaded program,
+ * set reset to 1, and then set it to 0. 
+ * From this point onwards, the user is at the mercy of the software:
+ * Depending on the program's code, and whether the code is correct,
+ * the screen may show some output, the user may be expected to enter
+ * some input using the keyboard, or the program may do some procerssing. 
+ */
+CHIP Computer {
+    IN reset;
+
+    PARTS:
+    
+    // CPU chip
+    // IN  inM[16],         // M value input  (M = contents of RAM[A])
+    //     instruction[16], // Instruction for execution
+    //     reset;           // Signals whether to restart the current
+    //                      // program (reset==1) or continue executing
+    //                      // the current program (reset==0).
+
+    // OUT outM[16],        // M value output
+    //     writeM,          // Write to M? 
+    //     addressM[15],    // Address in data memory (of M)
+    //     pc[15];          // Address of next instruction
+
+    CPU(inM=inM, instruction=instruction, reset=reset, outM=outM, writeM=writeM, addressM=addressM, pc=pc);
+
+    // Memory Chip
+    // IN in[16], load, address[15];
+    // OUT out[16];
+    Memory(in=outM, load=writeM, address=addressM, out=inM);
+
+    // ROM32K chip
+    // IN  address[15];
+    // OUT out[16];
+    ROM32K(address=pc, out=instruction);
+
+}

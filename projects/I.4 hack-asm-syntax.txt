@@ -1,0 +1,16 @@
+
+@value or @variable // A=value or A=variable (A directive)
+destination = computation; jump // C directive
+// destination is any subset of A, D and M (eg, empty, A, D, M, AM AD DM, ADM)
+// computation is any operation provided by ALU with ADM registers
+// JUMP is any of jump strings satisfying any subset of less, equal or greater
+//      it jumps to the assembly line stored in A, so jump directives are almost always preceded by an @ directive (A directive
+
+@new_string // assign new unused register address to new_string
+
+(LOCATION) // Define LOCATION = line number of next instruction
+
+
+// array
+// RAM[array_start] = address of array first element
+// RAM[length=array_start] = length of array

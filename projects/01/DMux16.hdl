@@ -1,0 +1,8 @@
+CHIP DMux16 {
+    IN in[16], sel;
+    OUT a[16], b[16];
+
+    PARTS:
+    DMux8 (in=in[0..7] , sel=sel, a=a[0..7] , b=b[0..7] );
+    DMux8 (in=in[8..15], sel=sel, a=a[8..15], b=b[8..15]);
+}

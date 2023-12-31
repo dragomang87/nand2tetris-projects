@@ -1,0 +1,141 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/05/CPU.hdl
+/**
+ * The Hack Central Processing unit (CPU).
+ * Parses the binary code in the instruction input and executes it according to the
+ * Hack machine language specification. In the case of a C-instruction, computes the
+ * function specified by the instruction. If the instruction specifies to read a memory
+ * value, the inM input is expected to contain this value. If the instruction specifies
+ * to write a value to the memory, sets the outM output to this value, sets the addressM
+ * output to the target address, and asserts the writeM output (when writeM == 0, any
+ * value may appear in outM).
+ * If the reset input is 0, computes the address of the next instruction and sets the
+ * pc output to that value. If the reset input is 1, sets pc to 0.
+ * Note: The outM and writeM outputs are combinational: they are affected by the
+ * instruction's execution during the current cycle. The addressM and pc outputs are
+ * clocked: although they are affected by the instruction's execution, they commit to
+ * their new values only in the next cycle.
+ */
+CHIP CPU {
+
+    IN  inM[16],         // M value input  (M = contents of RAM[A])
+        instruction[16], // Instruction for execution
+        reset;           // Signals whether to restart the current
+                         // program (reset==1) or continue executing
+                         // the current program (reset==0).
+
+    OUT outM[16],        // M value output
+        writeM,          // Write to M? 
+        addressM[15],    // Address in data memory (of M)
+        pc[15];          // Address of next instruction
+
+    PARTS:
+    // Mux16(a=, b=, sel=, out); // a if sel=0, b if sel=1
+    // Mux4Way16(a=, b=, c=, d=, sel=, out= ); // sel counts in binary from a to d
+    // Mux4Way  (a=, b=, c=, d=, sel=, out= ); // sel counts in binary from a to d
+    // Mux8Way16(a=, b=, c=, d=, e=, f=, g=, h=, sel=, out= ); // sel counts in binary from a to h
+    //
+    // DMux16 (in=, sel=, a=, b=);
+    // DMux4Way16 (in=, sel=, a=, b=, c=, d=);
+    // DMux4Way   (in=, sel=, a=, b=, c=, d=);
+
+
+
+    // A Instruction
+    // instruction = 0 instruction[0..14]
+    // A = instruction
+    // C Instruction
+    // instruction = 111 a c1 ... c6 d1 d2 d3 j1 j2 j3
+        // a = selects second input to ALU
+        //     if a=1 then y = M else y = A
+        Mux16(a=outA, b=inM, sel=instruction[12], out=y); // a if sel=0, b if sel=1
+    // c = instruction to the ALU: x = D, y, c bits
+    // d = destination selection A D M
+    //// A DESTINATION
+        // if d1 = instruction[5] -> A: d1 selects if write to A
+        // A = instruction if instruction[15] = 0
+        // otherwise A = aluAout if (instruction[15] = 1 and instruction[5] = 1)
+        // Send a 1 to the A register load if instruction[15] = 0 or (instruction[15] = 1 and instruction[5] = 1)
+        // (Not x) or (x and y) = Not ( x and Not(x and y) ) = x nand (x nand y)
+        Nand(a=instruction[15], b=instruction[5], out=CinstructionLoadA);
+        Nand(a=instruction[15], b=CinstructionLoadA, out=loadA);
+    ////  D DESTINATION
+        // if d2 = instruction[4] -> D: d2 selects if write to D
+        // Send a 1 to the D register load if instruction[15] = 1 and instruction[4] = 1
+        And(a=instruction[15], b=instruction[4], out=loadD);
+    //// M DESTINATION
+        // if d3 = instruction[3] -> M: d3 selects if write to M
+        // M is an output and the write is controlled by the output writeM
+        // => no need to multiplex the ALU output for M, just direct output below
+        // M write output switch writeM
+        // 1 if reset = 0 and instruction[15] = 1 and instruction[3] = 1
+        And(a=instruction[15], b=instruction[3], out=instructionwriteM);
+        Not(in=reset, out=notreset);
+        And(a=notreset, b=instructionwriteM, out=writeM);
+    // j = jump condition selection JLT JEQ JGT
+    //     if j1 = instruction[2] -> JLT: j1 lets jump if outcome negative
+    //     if j2 = instruction[1] -> JEQ: j2 lets jump if outcome zero
+    //     if j3 = instruction[0] -> JGT: j3 lets jump if outcome positive
+    // zero     condition provided by ALU's zr
+    // negative condition provided by ALU's ng
+    // Jump because negative
+    And(a=outcomenegative, b=instruction[2], out=JLT);
+    // Jump because zero
+    And(a=outcomezero, b=instruction[1], out=JEQ);
+    // Positive if not zero nor neg
+    Or (a=outcomezero, b=outcomenegative, out=outcomenonpositive);
+    Not(in=outcomenonpositive, out=outcomepositive);
+    // Jump because positive
+    And(a=outcomepositive, b=instruction[0], out=JGT);
+    // Jump if any of the above is true
+    Or(a=JLT, b=JEQ, out=JLE);
+    Or(a=JLE, b=JGT, out=JMP);
+    // Jump only if C-instruction
+    And(a=JMP, b=instruction[15], out=CJMP);
+
+
+
+
+
+    // Register(in=, load=, out=);
+
+    // A register
+    //   = instruction if instruction[0] = 0
+    //   = aluAout     if instruction[0] = 1 and d1 = instruction[5] = 1
+    //   = A           otherwise
+    ARegister(in=inA, load=loadA, out=outA, out[0..14]=addressM);
+    Mux16(a=instruction, b=aluAout, sel=instruction[15], out=inA);
+
+    // D register
+    //   = aluDout     if instruction[0] = 1 and d2 = instruction[4] = 1
+    //   = D           otherwise
+    DRegister(in=aluDout, load=loadD, out=outD);
+
+    // Mux storage of A, D, M to outM
+
+    // Mux input   of A, D, M to ALU
+
+    // Program Counter
+    // PC(in, inc=, load=, reset=, out=);
+    PC(in=outA, inc=true, load=CJMP, reset=reset, out[0..14]=pc);
+
+    // ALU
+    // ALU(x= ,y=,
+    //     zx, nx=, zy=, ny=, f=,  no=,
+    //     out=, zr=, ng= );
+    ALU(x=outD ,y=y,
+        zx=instruction[11],
+        nx=instruction[10],
+        zy=instruction[9],
+        ny=instruction[8],
+        f =instruction[7],
+        no=instruction[6],
+        out=aluAout,
+        out=aluDout,
+        out=outM, // the switch for this write is controlled by the output writeM
+        zr=outcomezero, ng=outcomenegative);
+
+
+}
