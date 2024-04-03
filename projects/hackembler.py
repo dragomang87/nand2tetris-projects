@@ -1,6 +1,3 @@
-import sys
-import mimetypes
-import warnings
 
 # HACK Assembly Language Specification
 ## Registers and Memory
@@ -163,6 +160,7 @@ def parse_Cinstruction(line):
     # If neither = or ; are present warn the user that the instruction ultimately does nothing
     # print(eq, semicolon)
     if not( eq or semicolon ):
+        import warnings
         warnings.warn("No '=' or ';' in C-instruction, this instruction will have no effect on register, memory or program counter", SyntaxWarning)
         destination, computation, jump = '', line, ''
     elif eq and not semicolon:
@@ -202,6 +200,7 @@ def compile_Cinstruction(destination, computation, jump):
 
     # Warn user if there are extra character in the assignment
     if destination:
+        import warnings
         warnings.warn("There are spurious characters in C-instruction assignment (left side of =)", SyntaxWarning)
 
     # final destination
@@ -312,6 +311,9 @@ def compile_hack_assembly(asm_filename, hack_filename, debug=False):
             line_number +=1
 
 
+# PARSE ARGUMENTS
+import sys
+
 # Check if input file is given
 if len(sys.argv) == 1:
     print(  'please give a input file' +
@@ -319,6 +321,7 @@ if len(sys.argv) == 1:
             file=sys.stderr)
 
 # Check if input file is text file
+import mimetypes
 if mimetypes.guess_type(sys.argv[1])[0] != 'text/plain':
     print(  'input file noplease give a input' +
             ' (will be treated as Hack assembly text file)',
@@ -327,17 +330,24 @@ if mimetypes.guess_type(sys.argv[1])[0] != 'text/plain':
 # Save input filename
 asm_filename = sys.argv[1]
 
+
+# OUTPUT FILE
+
 # Create an output filename
 if asm_filename.find(".asm") + 1:
     hack_filename = asm_filename.replace('.asm', '.hack')
 else:
     hack_filename = asm_filename + '.hack'
 
+
+# COMPILE
+
 # Initialize the labels
 labels = default_labels
 
 # Do the labels pass (dictionaries are mutable and passed by reference)
 parse_labels(asm_filename, labels)
+
 # Do compile pass
 compile_hack_assembly(asm_filename, hack_filename, debug=True)
 
