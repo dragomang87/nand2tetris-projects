@@ -13,7 +13,7 @@
 #   Input/Output
 # Split into three types of instructions
 #   A(ddress) instructions
-#   Labels
+#   L(abel) instructions (Label declarations)
 #   C(omputation) instructions
 
 
@@ -32,6 +32,11 @@ def clean_line(line):
 # ADDRESSES
 ###############################################################################
 
+# Hack Machine language is a sequence of 16-bit commands
+#   commands starting with 0 are A(ddress) instructions
+#   commands starting with 1 are C(computation) instructions
+# Therefore addresses are 16-bit long but can only have 15-bit values
+
 def compile_address(decimal):
     # get the binary form as string
     # [2:] strips the leading 0b... from the string
@@ -41,96 +46,58 @@ def compile_address(decimal):
 
 
 ###############################################################################
-# A(DDRESS) INSTRUCTIONS
+# L(ABEL) INSTRUCTIONS (LABEL DECLARATIONS)
 ###############################################################################
-
-def parse_compile_Ainstruction(line, labels):
-    # PARSE
-    value = line[1:]
-    # Check if empty
-    if not value:
-        raise SyntaxError("A(ddress) instruction: empty address")
-    # Make sure there is only one @ at the beginning
-    if value[0] == '@':
-        raise SyntaxError('A(address) instruction: only one leading @ allowed')
-    # COMPILE
-    try:
-        # check if number
-        A = int(value)
-        # Check that the address is not too big
-        if A >= 2**15:
-            raise ValueError(
-                    "A(ddress) instruction: "
-                    "integer address provided "
-                    "but it exceeds 16 bits (65536 or above)"
-                    )
-        # Compile A(ddress) to binary instruction as string
-        A = compile_address(A)
-    except ValueError as evalue:
-        try:
-            # check if existing label
-            A = labels[value]
-        except KeyError as ekey:
-            # Parse new labels but dissallow float values
-            try:
-                A = float(value)
-            except:
-                # Raise error if we are out of RAM for the new variable
-                if labels['@next'] == 2**14:
-                    raise MemoryError(
-                        "A(ddress) instruction: "
-                        "out of RAM for assembly labels, "
-                        "label '" + value + "' reached address 2^16 "
-                        "which enters Screen memory map"
-                        )
-                # Treat as new variable
-                A = labels[value] = compile_address(labels['@next'])
-                # Move future labels to next address
-                labels['@next'] += 1
-            else:
-                # Raise error if float
-                # (if we raise inside the try clause
-                #  it will trigger creating a lable with float value)
-                raise ValueError(
-                        "A(ddress) instruction: float not allowed as address"
-                        )
-
-    return A + '\n'
+#
+# Assembly Syntax:
+#   (LABEL)
+#
+# This instruction does not produce any machine code
+# It assigns to LABEL the value of the program_counter
+# of the next coming instruction,
+# so that it can be used in A(ddress) instructions
+#
+# There are some default labels that do not need declaration
+# To implement labels, we create a dictionary assigning addresses to labels
+# We store these addresses already as compiled bitstrings
+# To declare labels, we split compilation in two passes:
+#   PASS 1 - count all instructions (program counter) but skip compilation,
+#            when a label declaration is found assign the correct program counter
+#            and store the label in the dictionary
+#   PASS 2 - ingnore all label declarations and compile all
+#            A(ddress) instructions, using the dictionary when needed,
+#            and C(omputation) instructions
 
 
-
-###############################################################################
-# LABELS
-###############################################################################
 
 default_labels = {
     # store the next available address
     # cannot be called 'next' because it may be used by the assembly code
     # the parser will never interpret '@next' as a value so this entry is safe
     '@next'  : 16,
-    'SP'     : '0000' '0000' '0000' '0000',
-    'LCL'    : '0000' '0000' '0000' '0001',
-    'ARG'    : '0000' '0000' '0000' '0010',
-    'THIS'   : '0000' '0000' '0000' '0011',
-    'THAT'   : '0000' '0000' '0000' '0100',
-    'SCREEN' : '0100' '0000' '0000' '0000', # 16384,
-    'KBD'    : '0110' '0000' '0000' '0000', # 24576,
-    'R0'     : '0000' '0000' '0000' '0000',
-    'R1'     : '0000' '0000' '0000' '0001',
-    'R2'     : '0000' '0000' '0000' '0010',
-    'R3'     : '0000' '0000' '0000' '0011',
-    'R4'     : '0000' '0000' '0000' '0100',
-    'R5'     : '0000' '0000' '0000' '0101',
-    'R6'     : '0000' '0000' '0000' '0110',
-    'R7'     : '0000' '0000' '0000' '0111',
-    'R8'     : '0000' '0000' '0000' '1000',
-    'R9'     : '0000' '0000' '0000' '1001',
-    'R10'    : '0000' '0000' '0000' '1010',
-    'R11'    : '0000' '0000' '0000' '1011',
-    'R12'    : '0000' '0000' '0000' '1100',
-    'R13'    : '0000' '0000' '0000' '1101',
-    'R14'    : '0000' '0000' '0000' '1110',
-    'R15'    : '0000' '0000' '0000' '1111',
+    'SP'     : '0000' '0000' '0000' '0000', #     0, #
+    'LCL'    : '0000' '0000' '0000' '0001', #     1, #
+    'ARG'    : '0000' '0000' '0000' '0010', #     2, #
+    'THIS'   : '0000' '0000' '0000' '0011', #     3, #
+    'THAT'   : '0000' '0000' '0000' '0100', #     4, #
+    'SCREEN' : '0100' '0000' '0000' '0000', # 16384, #
+    'KBD'    : '0110' '0000' '0000' '0000', # 24576, #
+    'R0'     : '0000' '0000' '0000' '0000', #     0, #
+    'R1'     : '0000' '0000' '0000' '0001', #     1, #
+    'R2'     : '0000' '0000' '0000' '0010', #     2, #
+    'R3'     : '0000' '0000' '0000' '0011', #     3, #
+    'R4'     : '0000' '0000' '0000' '0100', #     4, #
+    'R5'     : '0000' '0000' '0000' '0101', #     5, #
+    'R6'     : '0000' '0000' '0000' '0110', #     6, #
+    'R7'     : '0000' '0000' '0000' '0111', #     7, #
+    'R8'     : '0000' '0000' '0000' '1000', #     8, #
+    'R9'     : '0000' '0000' '0000' '1001', #     9, #
+    'R10'    : '0000' '0000' '0000' '1010', #    10, #
+    'R11'    : '0000' '0000' '0000' '1011', #    11, #
+    'R12'    : '0000' '0000' '0000' '1100', #    12, #
+    'R13'    : '0000' '0000' '0000' '1101', #    13, #
+    'R14'    : '0000' '0000' '0000' '1110', #    14, #
+    'R15'    : '0000' '0000' '0000' '1111', #    15, #
     }
 
 def parse_label_instruction(line):
@@ -171,6 +138,87 @@ def compile_label_instruction(label, labels, program_counter):
     # that is done by the global parser
     # and is passed to the instruction compiler as arguments
     labels[label] = compile_address(program_counter)
+
+
+
+###############################################################################
+# A(DDRESS) INSTRUCTIONS
+###############################################################################
+#
+# Assembly Syntax:
+#   @<address>
+#   @LABEL
+#   @VARIABLE
+# where
+#   <address> is a 15bit integer
+#   LABEL has a 15bit integer value assigned to it by L(abel) instructions
+#   VARIABLE:
+#       gets assigned a new free register address at the first encounter
+#       is mapped to the assigned values at the next encounter
+#
+# Variables do not need to exist at any point unlike labels,
+# so a second pass is not needed,
+# but they use the same logic as labels so they are stored in the same dictionary
+# The label '@next', which is prohibited in assembly code,
+# is used to keep track of what is the next free register
+
+def parse_compile_Ainstruction(line, labels):
+    # PARSE
+    value = line[1:]
+    # Check if empty
+    if not value:
+        raise SyntaxError("A(ddress) instruction: empty address")
+    # Make sure there is only one @ at the beginning
+    if value[0] == '@':
+        raise SyntaxError('A(address) instruction: only one leading @ allowed')
+    # COMPILE
+    # Check if the address is a 15bit integer
+    try:
+        A = int(value)
+        # Check that the address is not too big
+        # The RAM size is 32KiB = 2**15 B
+        if A >= 2**15:
+            raise ValueError(
+                    "A(ddress) instruction: "
+                    "integer address provided "
+                    "but it exceeds 15 bits (32768 or above)"
+                    )
+        # Compile A(ddress) to binary instruction as string
+        A = compile_address(A)
+    except ValueError as evalue:
+        try:
+            # check if existing label
+            A = labels[value]
+        except KeyError as ekey:
+            # Parse new labels but dissallow float values
+            try:
+                A = float(value)
+            except:
+                # Raise error if we are out of RAM for the new variable
+                # The RAM is segmented in three memory chips
+                #   16KiB for the RAM
+                #    8KiB for the Screen
+                #    1  B for the keyboard
+                if labels['@next'] == 2**14:
+                    raise MemoryError(
+                        "A(ddress) instruction: "
+                        "out of RAM for assembly labels, "
+                        "label '" + value + "' reached address 2^14 "
+                        "which enters Screen memory map"
+                        )
+                # Treat as new variable
+                A = labels[value] = compile_address(labels['@next'])
+                # Move future labels to next address
+                labels['@next'] += 1
+            else:
+                # Raise error if float
+                # (if we raise inside the try clause
+                #  it will trigger creating a lable with float value)
+                raise ValueError(
+                        "A(ddress) instruction: float not allowed as address"
+                        )
+
+    return A + '\n'
 
 
 
@@ -553,7 +601,7 @@ labels = default_labels
 # (dictionaries are mutable and passed by reference)
 parse_asm_labels(asm_filename, labels)
 
-# PSS 2 - compile Hack assembly code to Hack machine language
+# PASS 2 - compile Hack assembly code to Hack machine language
 compile_asm_to_hack(asm_filename, hack_filename, debug=True)
 
 
