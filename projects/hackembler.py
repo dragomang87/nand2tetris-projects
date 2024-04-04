@@ -1,51 +1,89 @@
-
+###############################################################################
 # HACK Assembly Language Specification
-## Registers and Memory
-## Branching
-## Variables
-## Iteration
-## Pointers
-## Input/Output
+###############################################################################
+
+# All possible instructions are 16-bits instructions
+
+# They describe
+#   Registers and Memory
+#   Branching
+#   Variables
+#   Iteration
+#   Pointers
+#   Input/Output
+# Split into three types of instructions
+#   A(ddress) instructions
+#   Labels
+#   C(omputation) instructions
 
 
-jump_dictionary = {
-    ''    : '000',
-    'JLT' : '100',
-    'JEQ' : '010',
-    'JGT' : '001',
-    'JLE' : '110',
-    'JNE' : '101',
-    'JGE' : '011',
-    'JMP' : '111',
-    }
+###############################################################################
+# TOOLS
+###############################################################################
 
-ALUflags_table = {
-    '0'   : '101010',
-    '1'   : '111111',
-    '-1'  : '111010',
-    'D'   : '001100',
-    'A'   : '110000',
-    '!D'  : '001101',
-    '!A'  : '110001',
-    '-D'  : '001100',
-    '-A'  : '110011',
-    'D+1' : '011111',
-    '1+D' : '011111',
-    'A+1' : '110111',
-    '1+A' : '110111',
-    'D-1' : '001110',
-    'A-1' : '110010',
-    'D+A' : '000010',
-    'A+D' : '000010',
-    'D-A' : '010011',
-    '-A+D': '010011',
-    'A-D' : '000111',
-    '-D+A': '000111',
-    'D&A' : '000000',
-    'A&D' : '000000',
-    'D|A' : '010101',
-    'A|D' : '010101',
-    }
+def clean_line(line):
+    # purge white spaces
+    line = ''.join(line.split())
+    # purge comments
+    return line.split('//')[0]
+
+
+###############################################################################
+# ADDRESSES
+###############################################################################
+
+def compile_address(decimal):
+    # get the binary form as string
+    # [2:] strips the leading 0b... from the string
+    bits = (bin(decimal))[2:]
+    # pad to 16 bits (15 address + 1 control zero bit)
+    return bits.zfill(16)
+
+
+###############################################################################
+# A INSTRUCTIONS
+###############################################################################
+
+def parse_compile_Ainstruction(line, labels):
+    # PARSE
+    value = line[1:]
+    # check if empty
+    if not value:
+        raise ValueError("Empty A-instruction")
+    # COMPILE
+    try:
+        # check if number
+        A = int(value)
+        # Check that the address is not too big
+        if A >= 2**15:
+            raise ValueError("Value of A-instruction exceeds 16 bits (65536 or above)")
+        # COMPILE A INSTRUCTION
+        # Convert to binary instruction as string
+        A = compile_address(A)
+    except ValueError as evalue:
+        try:
+            # check if existing lable
+            A = labels[value]
+        except KeyError as ekey:
+            # raise KeyError("Label in A instruction not previously defined") from e
+            try:
+                A = float(value)
+            except:
+                # Treat as new variable
+                A = labels[value] = compile_address(labels['@next'])
+                labels['@next'] += 1
+                if labels['@next'] == 2**14:
+                    raise MemoryError("You have run out of RAM for variables (next variable would have address 2^16 which enters Screen memory map)")
+            else:
+                raise ValueError("Floats are not allowed in A-instruction")
+
+    return A + '\n'
+
+
+
+###############################################################################
+# LABELS
+###############################################################################
 
 default_labels = {
     # store the next available address
@@ -77,56 +115,6 @@ default_labels = {
     'R15'    : '0000' '0000' '0000' '1111',
     }
 
-def clean_line(line):
-    # purge white spaces
-    line = ''.join(line.split())
-    # purge comments
-    return line.split('//')[0]
-
-def address(decimal):
-    # get the binary form as string
-    # [2:] strips the leading 0b... from the string
-    bits = (bin(decimal))[2:]
-    # pad to 16 bits (15 address + 1 control zero bit)
-    return bits.zfill(16)
-
-def parse_Ainstruction(line, labels):
-    # PARSE
-    value = line[1:]
-    # check if empty
-    if not value:
-        raise ValueError("Empty A-instruction")
-    # COMPILE
-    try:
-        # check if number
-        A = int(value)
-        # Check that the address is not too big
-        if A >= 2**15:
-            raise ValueError("Value of A-instruction exceeds 16 bits (65536 or above)")
-        # Convert to binary instruction as string
-        A = address(A)
-    except ValueError as evalue:
-        try:
-            # check if existing lable
-            A = labels[value]
-        except KeyError as ekey:
-            # raise KeyError("Label in A instruction not previously defined") from e
-            try:
-                A = float(value)
-            except:
-                # Treat as new variable
-                A = labels[value] = address(labels['@next'])
-                labels['@next'] += 1
-                if labels['@next'] == 2**14:
-                    raise MemoryError("You have run out of RAM for variables (next variable would have address 2^16 which enters Screen memory map)")
-            else:
-                raise ValueError("Floats are not allowed in A-instruction")
-
-    return A + '\n'
-
-
-
-
 def parse_label(line):
     if line[-1] != ')':
         raise SyntaxError("Label declaration does not end with ')'")
@@ -138,9 +126,87 @@ def parse_label(line):
     else:
         raise ValueError("LABEL in (LABEL) declaration cannot be a number")
 
-def compile_label(label, labels, program_counter):
-    labels[label] = address(program_counter)
 
+def compile_label(label, labels, program_counter):
+    labels[label] = compile_address(program_counter)
+
+
+
+###############################################################################
+# C INSTRUCTIONS
+###############################################################################
+#
+# Assembly Syntax:
+#   destination = computation; jump
+#
+# Hack machine language syntax:
+#   1 1 1 a c1 c2 c3 c4 c5 c6 d1 d2 d3 j1 j2 j3
+#
+#
+# destination / d1 d2 d3:
+#   any combination of A, D and M = RAM[A]
+#   d1 = 1 if A is a destination, otherwise zero
+#   d2 = 1 if D is a destination, otherwise zero
+#   d3 = 1 if M is a destination, otherwise zero
+#
+# jump / j1 j2 j3:
+#   jump:
+#       JLT JGT: jump if computation result is less or greater than zero
+#       JLE JGE: jump if computation result is less/greater or equal to zero
+#       JEQ JNE: jump if computation result equal or not equal to zero
+#       JMP or empty: unconditional jump or not jump
+#   j1 j2 j3:
+#       j1 = 1 if jump when computation result is less than zero, otherwise 0
+#       j2 = 1 if jump when computation result equals zero, otherwise 0
+#       j3 = 1 if jump when computation result is greater than zero, otherwise 0
+
+jumps = {
+#   jump  : j1 j2 j3
+    ''    : '000',
+    'JLT' : '100',
+    'JEQ' : '010',
+    'JGT' : '001',
+    'JLE' : '110',
+    'JNE' : '101',
+    'JGE' : '011',
+    'JMP' : '111',
+    }
+
+# computation / a c1 c2 c3 c4 c5 c6:
+#   addressing: a = 0 if A is selected for computation, 1 if M is selected for computation
+#   operation: see dictionary below for available operations for A and D (when a=0)
+#              and the corresponding bitstrings c1 c2 c3 c4 c5 c6
+
+computations = {
+# computation : c1 c2 c3 c4 c5 c6
+    '0'   : '101010',
+    '1'   : '111111',
+    '-1'  : '111010',
+    'D'   : '001100',
+    'A'   : '110000',
+    '!D'  : '001101',
+    '!A'  : '110001',
+    '-D'  : '001100',
+    '-A'  : '110011',
+    'D+1' : '011111',
+    '1+D' : '011111',
+    'A+1' : '110111',
+    '1+A' : '110111',
+    'D-1' : '001110',
+    '-1+D': '001110',
+    'A-1' : '110010',
+    '-1+A': '110010',
+    'D+A' : '000010',
+    'A+D' : '000010',
+    'D-A' : '010011',
+    '-A+D': '010011',
+    'A-D' : '000111',
+    '-D+A': '000111',
+    'D&A' : '000000',
+    'A&D' : '000000',
+    'D|A' : '010101',
+    'A|D' : '010101',
+    }
 
 def parse_Cinstruction(line):
     # PARSE
@@ -211,14 +277,14 @@ def compile_Cinstruction(destination, computation, jump):
     # JUMP
     ###################################
     try:
-        jump = jump_dictionary[jump]
+        jump = jumps[jump]
     except:
-        print(jump_dictionary.key())
+        print(jumps.key())
         raise SyntaxError('The jump instruction is not one of the options above')
 
 
     ###################################
-    # COMPUTATION
+    # ADDRESSING
     ###################################
     # A or M addressing
     A = bool(computation.find('A') + 1)
@@ -234,28 +300,25 @@ def compile_Cinstruction(destination, computation, jump):
     else:
         a = '0'
 
+    ###################################
+    # OPERATION
+    ###################################
     # remember after parsing M we converted it to A, so we only need to check for computations with A and D
     try:
-        ALUflags = ALUflags_table[computation]
+        computation = computations[computation]
     except:
-        print(ALUflags_table.keys())
+        print(computations.keys())
         raise SyntaxError('Operation not recognized among the available computations listed above ')
-    computation = a + ALUflags
-    #plus  = computation.find('+') + 1
-    #minus = computation.find('-') + 1
-    #neg   = computation.find('!') + 1
-    #andop = computation.find('&') + 1
-    #orop  = computation.find('|') + 1
-    #if bool(plus) + bool(minus) + bool(neg) + bool(andop) + bool(orop) > 1:
-    #    raise SyntaxError("Two computations cannot be present at the same time in C-instruction, only one of +-&|! must be selected")
-    #elif plus:
-    #elif minus:
-    #elif neg:
-    #elif andop:
-    #elif orop:
-    #else:
 
-    return '111' + computation + destination + jump + '\n'
+    return '111' + a + computation + destination + jump + '\n'
+
+
+
+###############################################################################
+# COMPILATION FUNCTIONS
+###############################################################################
+
+# PASS 1 - LABEL PASS
 
 def parse_labels(asm_filename, labels):
     # Reading labels pass
@@ -278,6 +341,8 @@ def parse_labels(asm_filename, labels):
                 program_counter +=1
             line_number +=1
 
+# PASS 2 - HACK MACHINE CODE PASS
+
 def compile_hack_assembly(asm_filename, hack_filename, debug=False):
     if debug: print('Compiling file ' + asm_filename + ' into ' + hack_filename)
     with open(asm_filename, 'r') as assembly, open(hack_filename, 'w') as machine:
@@ -290,7 +355,7 @@ def compile_hack_assembly(asm_filename, hack_filename, debug=False):
                 pass
             elif line[0] == '@':
                 try:
-                    instruction = parse_Ainstruction(line, labels)
+                    instruction = parse_compile_Ainstruction(line, labels)
                     program_counter += 1
                     machine.write(instruction)
                     if debug: print(instruction)
@@ -301,7 +366,9 @@ def compile_hack_assembly(asm_filename, hack_filename, debug=False):
             else:
                 try:
                     destination, computation, jump = parse_Cinstruction(line)
-                    if debug: print(destination, computation, jump)
+                    if debug: print("destination: ", destination,
+                                  ", computation: ", computation,
+                                  ", jump: ",  jump)
                     instruction = compile_Cinstruction(destination, computation, jump)
                     program_counter +=1
                     machine.write(instruction)
@@ -310,6 +377,11 @@ def compile_hack_assembly(asm_filename, hack_filename, debug=False):
                     raise Exception("Failed C-instruction in line " + str(line_number) + '\n') from e
             line_number +=1
 
+
+
+###############################################################################
+# COMPILER
+###############################################################################
 
 # PARSE ARGUMENTS
 import sys
@@ -348,7 +420,7 @@ labels = default_labels
 # Do the labels pass (dictionaries are mutable and passed by reference)
 parse_labels(asm_filename, labels)
 
-# Do compile pass
+# Do machine code pass
 compile_hack_assembly(asm_filename, hack_filename, debug=True)
 
 
