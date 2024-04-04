@@ -2,7 +2,7 @@
 // and the book "The Elements of Computing Systems"
 // by Nisan and Schocken, MIT Press.
 // File name: projects/05/Memory.hdl
-/** 
+/**
  * The Memory chip implements the complete address space of the Hack data memory,
  * including RAM, memory mapped screen, and memory mapped keyboard.
  * Outputs the value of the memory location specified by the address input.
