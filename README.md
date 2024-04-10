@@ -10,3 +10,7 @@ might give hints on what the compiler in the layer above did wrong.
 
 ## Completed projects
 Up to project 06
+
+## JAVA crap
+## run with
+_JAVA_AWT_WM_NONREPARENTING=1 *.sh
