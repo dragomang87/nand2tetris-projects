@@ -17,7 +17,7 @@ D = M
 M = 0
 @THIS
 M = D
-D = 0 
+D = 0
 // VM push constant 3040
 @3040
 D = A
@@ -36,7 +36,7 @@ D = M
 M = 0
 @THAT
 M = D
-D = 0 
+D = 0
 // VM push constant 32
 @32
 D = A
@@ -125,7 +125,7 @@ D = M
 M = 0
 A = A - 1
 M = M + D
-D = 0 
+D = 0
 // VM push that 2
 // ASM A(THAT,2)
 @THAT
@@ -148,7 +148,7 @@ D = M
 M = 0
 A = A - 1
 M = M - D
-D = 0 
+D = 0
 // VM push that 6
 // ASM A(THAT,6)
 @THAT
@@ -171,4 +171,4 @@ D = M
 M = 0
 A = A - 1
 M = M + D
-D = 0 
+D = 0

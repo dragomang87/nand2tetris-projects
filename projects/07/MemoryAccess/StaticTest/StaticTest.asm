@@ -37,7 +37,7 @@ D = M
 M = 0
 @static.MemoryAccess/StaticTest/StaticTest.vm.8
 M = D
-D = 0 
+D = 0
 // VM pop  static (static.MemoryAccess/StaticTest/StaticTest.vm) 3
 // ASM pop stack
 @SP
@@ -46,7 +46,7 @@ D = M
 M = 0
 @static.MemoryAccess/StaticTest/StaticTest.vm.3
 M = D
-D = 0 
+D = 0
 // VM pop  static (static.MemoryAccess/StaticTest/StaticTest.vm) 1
 // ASM pop stack
 @SP
@@ -55,7 +55,7 @@ D = M
 M = 0
 @static.MemoryAccess/StaticTest/StaticTest.vm.1
 M = D
-D = 0 
+D = 0
 // VM push static (static.MemoryAccess/StaticTest/StaticTest.vm) 3
 @static.MemoryAccess/StaticTest/StaticTest.vm.3
 D = M
@@ -84,7 +84,7 @@ D = M
 M = 0
 A = A - 1
 M = M - D
-D = 0 
+D = 0
 // VM push static (static.MemoryAccess/StaticTest/StaticTest.vm) 8
 @static.MemoryAccess/StaticTest/StaticTest.vm.8
 D = M
@@ -103,4 +103,4 @@ D = M
 M = 0
 A = A - 1
 M = M + D
-D = 0 
+D = 0

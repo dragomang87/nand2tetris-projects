@@ -361,7 +361,7 @@ D = M
 M = 0
 A = A - 1
 M = M + D
-D = 0 
+D = 0
 // VM push constant 112
 @112
 D = A
@@ -380,7 +380,7 @@ D = M
 M = 0
 A = A - 1
 M = M - D
-D = 0 
+D = 0
 // VM neg
 @SP
 A = M - 1
@@ -393,7 +393,7 @@ D = M
 M = 0
 A = A - 1
 M = M & D
-D = 0 
+D = 0
 // VM push constant 82
 @82
 D = A
@@ -412,7 +412,7 @@ D = M
 M = 0
 A = A - 1
 M = M | D
-D = 0 
+D = 0
 // VM not
 @SP
 A = M - 1

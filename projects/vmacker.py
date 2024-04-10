@@ -176,13 +176,13 @@ VM["add"] = (
         "\n// VM add"
         + ASM["M,D = x,y"] +
         "\nM = M + D"
-        "\nD = 0 "      # optional safety feature
+        "\nD = 0"      # optional safety feature
         )
 VM["sub"] = (
         "\n// VM sub"
         + ASM["M,D = x,y"] +
         "\nM = M - D"
-        "\nD = 0 "      # optional safety feature
+        "\nD = 0"      # optional safety feature
         )
 VM["neg"] = (
         "\n// VM neg"
@@ -198,13 +198,13 @@ VM["and"] = (
         "\n// VM and"
         + ASM["M,D = x,y"] +
         "\nM = M & D"
-        "\nD = 0 "      # optional safety feature
+        "\nD = 0"      # optional safety feature
         )
 VM["or"] = (
         "\n// VM or"
         + ASM["M,D = x,y"] +
         "\nM = M | D"
-        "\nD = 0 "      # optional safety feature
+        "\nD = 0"      # optional safety feature
         )
 VM["not"] = (
         "\n// VM not"
@@ -265,14 +265,17 @@ for cmp in comparisons:
 ###############################################################################
 
 segment_max = {
-        'local'   : 2**14 - 256,
-        'argument': 2**14 - 256,
-        'this'    : 2**14 - 256,
-        'that'    : 2**14 - 256,
-        'temp'    : 8,
-        'constant': 2**15,
+        # 0:2048 = 0:2**11 are standard registers, static and the stack
+        # 2**14:2**15 is the screen buffer
+        'local'   : 2**14 - 2**11,
+        'argument': 2**14 - 2**11,
+        'this'    : 2**14 - 2**11,
+        'that'    : 2**14 - 2**11,
+        # Non array segments have different maxima
+        'temp'    : 8,              # 5:12
+        'constant': 2**15,          # any value of A instructions, 2**15:2**16 are C instruction
         'pointer' : 2,
-        'static'  : 2**15,
+        'static'  : 2**8 - 2**4,    # range 16:256 = 2**4:2**8
         }
 
 # segment[i] = RAM[SEGMENT + i]
@@ -407,7 +410,7 @@ VM["pop" ]["pointer"] = lambda i: (
         + ASM["pop stack"] +
         "\n@" + pointer[i] +
         "\nM = D"
-        "\nD = 0 "      # optional safety feature
+        "\nD = 0"      # optional safety feature
         )
 VM["push"]["pointer"] = lambda i: (
         "\n// VM push pointer " + str(i) +
@@ -437,7 +440,7 @@ def pop_static(i):
         + ASM["pop stack"] +
         "\n@" + static + "." + str(i) +
         "\nM = D"
-        "\nD = 0 "      # optional safety feature
+        "\nD = 0"      # optional safety feature
         )
 
 VM["pop"]["static"] = pop_static

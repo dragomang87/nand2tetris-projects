@@ -244,7 +244,7 @@ D = M
 M = 0
 A = A - 1
 M = M + D
-D = 0 
+D = 0
 // VM push that 1
 // ASM A(THAT,1)
 @THAT
@@ -267,7 +267,7 @@ D = M
 M = 0
 A = A - 1
 M = M - D
-D = 0 
+D = 0
 // VM push that 6
 // ASM A(THAT,6)
 @THAT
@@ -304,7 +304,7 @@ D = M
 M = 0
 A = A - 1
 M = M + D
-D = 0 
+D = 0
 // VM sub
 // ASM pop stack
 @SP
@@ -313,7 +313,7 @@ D = M
 M = 0
 A = A - 1
 M = M - D
-D = 0 
+D = 0
 // VM push temp 6
 @5
 D = A
@@ -335,4 +335,4 @@ D = M
 M = 0
 A = A - 1
 M = M + D
-D = 0 
+D = 0
