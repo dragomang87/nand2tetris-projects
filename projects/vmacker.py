@@ -320,7 +320,7 @@ ASM["push address"] = (
         "\n@address"
         "\nA = M"
         "\nM = D"
-        "\nD = 0 "      # optional safety feature
+        "\nD = 0"      # optional safety feature
         )
 
 ASM["address"] = lambda segment, i: (
