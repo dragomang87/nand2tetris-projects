@@ -22,10 +22,10 @@
 ###############################################################################
 
 def clean_line(line):
-    # purge white spaces
-    line = ''.join(line.split())
     # purge comments
-    return line.split('//')[0]
+    line = line.split('//')[0]
+    # purge white spaces
+    return ''.join(line.split())
 
 
 ###############################################################################
@@ -68,9 +68,71 @@ def compile_address(decimal):
 #            A(ddress) instructions, using the dictionary when needed,
 #            and C(omputation) instructions
 
+labels = {}
+
+def parse_label_instruction(line):
+    # check if the opening syntax ( parenthesis is missing
+    # the parenthesis is checked by the code calling this function
+    # so if this happens something might be wrong with this file
+    if line[0] != '(' :
+        raise RuntimeError(
+            f"Hack assembly to machine language compiler {__file__}:\n"
+            "line without leading ( passed to parse_label_instruction(...), "
+            "there might be a problem with this compiler {__file__}"
+            )
+    # check if the closing syntax parenthesis ) is missing
+    if (line[-1] != ')'):
+        raise SyntaxError("(LABEL) declaration: missing trailing)")
+    # remove the parentheses to get the label
+    # ! notice that spaces are not removed and are left as part of the label !
+    label = line[1:-1]
+    # check if the label is a number
+    try:
+        float(label)
+    # return the label otherwise
+    except:
+        return label
+    # raise an error if it is a number
+    else:
+        raise ValueError("LABEL in (LABEL) declaration cannot be a number")
 
 
-default_labels = {
+def compile_label_instruction(label, program_counter):
+    # Convert the program counter integer to a bitstring address
+    # and assign it as value to the given label in the given label dictionary
+    # This is a bit different than compiling A and C instructions
+    # because the machine code of Label instructions
+    # depends on the position in the assembly file
+    # therefore there is a part of the compilation,
+    # which is figuring out this position,
+    # that is done by the global parser
+    # and is passed to the instruction compiler as arguments
+    labels[label] = compile_address(program_counter)
+
+
+
+###############################################################################
+# A(DDRESS) INSTRUCTIONS
+###############################################################################
+#
+# Assembly Syntax:
+#   @<address>
+#   @LABEL
+#   @VARIABLE
+# where
+#   <address> is a 15bit integer
+#   LABEL has a 15bit integer value assigned to it by L(abel) instructions
+#   VARIABLE:
+#       starting from address 16,
+#       gets assigned a new free register address at the first encounter
+#       and is mapped to the assigned values at the next encounter
+#
+# Variables do not need to exist from the beginning unlike labels,
+# so a second pass is not needed,
+# The '@next' variable, which is prohibited in assembly code,
+# is used to keep track of what is the next free register
+
+variables = {
     # store the next available address
     # cannot be called 'next' because it may be used by the assembly code
     # the parser will never interpret '@next' as a value so this entry is safe
@@ -100,69 +162,7 @@ default_labels = {
     'R15'    : '0000' '0000' '0000' '1111', #    15, #
     }
 
-def parse_label_instruction(line):
-    # check if the opening syntax ( parenthesis is missing
-    # the parenthesis is checked by the code calling this function
-    # so if this happens something might be wrong with this file
-    if line[0] != '(' :
-        raise RuntimeError(
-            f"Hack assembly to machine language compiler {__file__}:\n"
-            "line without leading ( passed to parse_label_instruction(...), "
-            "there might be a problem with this compiler {__file__}"
-            )
-    # check if the closing syntax parenthesis ) is missing
-    if (line[-1] != ')'):
-        raise SyntaxError("(LABEL) declaration: missing trailing)")
-    # remove the parentheses to get the label
-    # ! notice that spaces are not removed and are left as part of the label !
-    label = line[1:-1]
-    # check if the label is a number
-    try:
-        float(label)
-    # return the label otherwise
-    except:
-        return label
-    # raise an error if it is a number
-    else:
-        raise ValueError("LABEL in (LABEL) declaration cannot be a number")
-
-
-def compile_label_instruction(label, labels, program_counter):
-    # Convert the program counter integer to a bitstring address
-    # and assign it as value to the given label in the given label dictionary
-    # This is a bit different than compiling A and C instructions
-    # because the machine code of Label instructions
-    # depends on the position in the assembly file
-    # therefore there is a part of the compilation,
-    # which is figuring out this position,
-    # that is done by the global parser
-    # and is passed to the instruction compiler as arguments
-    labels[label] = compile_address(program_counter)
-
-
-
-###############################################################################
-# A(DDRESS) INSTRUCTIONS
-###############################################################################
-#
-# Assembly Syntax:
-#   @<address>
-#   @LABEL
-#   @VARIABLE
-# where
-#   <address> is a 15bit integer
-#   LABEL has a 15bit integer value assigned to it by L(abel) instructions
-#   VARIABLE:
-#       gets assigned a new free register address at the first encounter
-#       is mapped to the assigned values at the next encounter
-#
-# Variables do not need to exist at any point unlike labels,
-# so a second pass is not needed,
-# but they use the same logic as labels so they are stored in the same dictionary
-# The label '@next', which is prohibited in assembly code,
-# is used to keep track of what is the next free register
-
-def parse_compile_Ainstruction(line, labels):
+def parse_compile_Ainstruction(line):
     # PARSE
     value = line[1:]
     # Check if empty
@@ -186,37 +186,39 @@ def parse_compile_Ainstruction(line, labels):
         # Compile A(ddress) to binary instruction as string
         A = compile_address(A)
     except ValueError as evalue:
+        # Dissallow float values
         try:
-            # check if existing label
-            A = labels[value]
-        except KeyError as ekey:
-            # Parse new labels but dissallow float values
-            try:
-                A = float(value)
-            except:
+            A = float(value)
+        except:
+            # check if it is a label
+            if   value in labels:
+                A = labels   [value]
+            elif value in variables:
+                A = variables[value]
+            else:
                 # Raise error if we are out of RAM for the new variable
                 # The RAM is segmented in three memory chips
                 #   16KiB for the RAM
                 #    8KiB for the Screen
                 #    1  B for the keyboard
-                if labels['@next'] == 2**14:
+                if variables['@next'] == 2**14:
                     raise MemoryError(
                         "A(ddress) instruction: "
-                        "out of RAM for assembly labels, "
+                        "out of RAM for assembly variables, "
                         "label '" + value + "' reached address 2^14 "
                         "which enters Screen memory map"
                         )
                 # Treat as new variable
-                A = labels[value] = compile_address(labels['@next'])
-                # Move future labels to next address
-                labels['@next'] += 1
-            else:
-                # Raise error if float
-                # (if we raise inside the try clause
-                #  it will trigger creating a lable with float value)
-                raise ValueError(
-                        "A(ddress) instruction: float not allowed as address"
-                        )
+                A = variables[value] = compile_address(variables['@next'])
+                # Move future variables to next address
+                variables['@next'] += 1
+        else:
+            # Raise error if float
+            # (if we raise inside the try clause
+            #  it will trigger creating a lable with float value)
+            raise ValueError(
+                    "A(ddress) instruction: float not allowed as address"
+                    )
 
     return A + '\n'
 
@@ -468,7 +470,7 @@ def compile_Cinstruction(destination, computation, jump):
 
 # PASS 1 - ASSEMBLY LABEL PASS
 # Find all label declarations in Hack assembly code (*.asm)
-def parse_asm_labels(asm_filename, labels):
+def parse_asm_labels(asm_filename):
     # Reading labels pass
     with open(asm_filename, 'r') as assembly:
         # Set counter of the instruction sequence number
@@ -483,7 +485,7 @@ def parse_asm_labels(asm_filename, labels):
             elif line[0] == '(':
                 try:
                     label = parse_label_instruction(line)
-                    compile_label_instruction(label, labels, program_counter)
+                    compile_label_instruction(label, program_counter)
                 except Exception as e:
                     raise Exception(
                         f"Failed (LABEL) declaration in line {line_number}"
@@ -496,7 +498,7 @@ def parse_asm_labels(asm_filename, labels):
 # PASS 2 - HACK MACHINE CODE PASS
 # Compile Hack assembly code (*.asm) to Hack machine language (*.hack)
 def compile_asm_to_hack(asm_filename, hack_filename, debug=False):
-    if debug: print("Compiling file {asm_filename} into {hack_filename}")
+    if debug: print(f"Compiling file {asm_filename} into {hack_filename}")
     with open( asm_filename, 'r') as assembly, \
          open(hack_filename, 'w') as machine:
         # Set counter of the instruction sequence number
@@ -512,7 +514,7 @@ def compile_asm_to_hack(asm_filename, hack_filename, debug=False):
             # Parse and compile lines starting with '@' as A(ddress) instructions
             elif line[0] == '@':
                 try:
-                    instruction = parse_compile_Ainstruction(line, labels)
+                    instruction = parse_compile_Ainstruction(line)
                     # Increase program counter
                     program_counter += 1
                     # Write instruction to .hack file
@@ -585,7 +587,7 @@ if asm_filename[-4:] != ".asm":
     hack_filename = asm_filename + '.hack'
     import warnings
     warnings.warn(
-        "Extension of input file {asm_filename} is not '.asm', "
+        f"Extension of input file {asm_filename} is not '.asm', "
         "it will still be treated as Hack assembly text file"
         )
 else:
@@ -594,12 +596,9 @@ else:
 
 # COMPILE
 
-# Initialize the labels
-labels = default_labels
-
 # PASS 1 - parse labels in assembly code
 # (dictionaries are mutable and passed by reference)
-parse_asm_labels(asm_filename, labels)
+parse_asm_labels(asm_filename)
 
 # PASS 2 - compile Hack assembly code to Hack machine language
 compile_asm_to_hack(asm_filename, hack_filename, debug=True)
