@@ -8,16 +8,16 @@ A = M
 M = D
 @SP
 M = M + 1
-D = 0
+D = 0 // optional safety feature
 // VM pop pointer 0
 // ASM pop stack
 @SP
 AM = M - 1
 D = M
-M = 0
+M = 0 // optional safety feature
 @THIS
 M = D
-D = 0
+D = 0 // optional safety feature
 // VM push constant 3040
 @3040
 D = A
@@ -27,16 +27,16 @@ A = M
 M = D
 @SP
 M = M + 1
-D = 0
+D = 0 // optional safety feature
 // VM pop pointer 1
 // ASM pop stack
 @SP
 AM = M - 1
 D = M
-M = 0
+M = 0 // optional safety feature
 @THAT
 M = D
-D = 0
+D = 0 // optional safety feature
 // VM push constant 32
 @32
 D = A
@@ -46,7 +46,7 @@ A = M
 M = D
 @SP
 M = M + 1
-D = 0
+D = 0 // optional safety feature
 // VM pop that 2
 // ASM address(THAT,2)
 @THAT
@@ -59,14 +59,14 @@ M = D
 @SP
 AM = M - 1
 D = M
-M = 0
+M = 0 // optional safety feature
 // ASM push address
 @address
 A = M
 M = D
-D = 0
-@address
-M = 0
+D = 0 // optional safety feature
+@address // optional safety feature
+M = 0 // optional safety feature
 // VM push constant 46
 @46
 D = A
@@ -76,7 +76,7 @@ A = M
 M = D
 @SP
 M = M + 1
-D = 0
+D = 0 // optional safety feature
 // VM pop that 6
 // ASM address(THAT,6)
 @THAT
@@ -89,14 +89,14 @@ M = D
 @SP
 AM = M - 1
 D = M
-M = 0
+M = 0 // optional safety feature
 // ASM push address
 @address
 A = M
 M = D
-D = 0
-@address
-M = 0
+D = 0 // optional safety feature
+@address // optional safety feature
+M = 0 // optional safety feature
 // VM push pointer 0
 @THIS
 D = M
@@ -106,7 +106,7 @@ A = M
 M = D
 @SP
 M = M + 1
-D = 0
+D = 0 // optional safety feature
 // VM push pointer 1
 @THAT
 D = M
@@ -116,16 +116,16 @@ A = M
 M = D
 @SP
 M = M + 1
-D = 0
+D = 0 // optional safety feature
 // VM add
 // ASM pop stack
 @SP
 AM = M - 1
 D = M
-M = 0
+M = 0 // optional safety feature
 A = A - 1
 M = M + D
-D = 0
+D = 0 // optional safety feature
 // VM push that 2
 // ASM A(THAT,2)
 @THAT
@@ -139,16 +139,16 @@ A = M
 M = D
 @SP
 M = M + 1
-D = 0
+D = 0 // optional safety feature
 // VM sub
 // ASM pop stack
 @SP
 AM = M - 1
 D = M
-M = 0
+M = 0 // optional safety feature
 A = A - 1
 M = M - D
-D = 0
+D = 0 // optional safety feature
 // VM push that 6
 // ASM A(THAT,6)
 @THAT
@@ -162,13 +162,13 @@ A = M
 M = D
 @SP
 M = M + 1
-D = 0
+D = 0 // optional safety feature
 // VM add
 // ASM pop stack
 @SP
 AM = M - 1
 D = M
-M = 0
+M = 0 // optional safety feature
 A = A - 1
 M = M + D
-D = 0
+D = 0 // optional safety feature
