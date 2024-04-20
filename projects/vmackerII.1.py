@@ -82,441 +82,6 @@ Helper command not part of the virtual machine (for now):
     x--
 """
 
-
-
-###############################################################################
-# IMPLEMENTATION - NOTES
-###############################################################################
-
-# We use dictionaries to produce code and use them as functions
-# We split the dictionaries in
-#   the VM  dictionary: contains mapping of actual VM code
-#   the ASM dictionary: contains mapping of helper code
-
-ASM = {}
-VM = {}
-
-# We add some safety feature
-# We clear registers and memory to 0 once they have been used/freed
-# To distinguish these operations from needed assembly code
-# we distinguish these operations by  marking them with a comment, e.g.
-#   'M = 0 // optional safety feature"
-#   'D = 0 // optional safety feature"
-# instead of just
-#   'M = 0"
-#   'D = 0"
-
-
-###############################################################################
-# IMPLEMENTATION - STACK
-###############################################################################
-
-# Predefined LIST with predefined location,
-# we access by shifting a pointer up and down
-# StackPointer = SP = 0
-# Stack Base address RAM[SP] = RAM[0] = 256
-# SP always points to the next where to push
-# (the next "free" address)
-
-ASM['pop stack'] = (
-        f"\n// ASM pop stack"
-        f"\n@SP"
-        f"\nA M = M - 1"
-        f"\n D  = M"
-        f"\n  M = 0 // optional safety feature"
-        ) # 3+1 lines
-
-ASM['push stack'] = (
-        f"\n// ASM push stack"
-        f"\n@SP"
-        f"\nA M = M + 1"
-        f"\nA   = A - 1"
-        f"\n  M = D"
-        f"\n D  = 0 // optional safety feature"
-        ) # 4+1 lines
-
-"""
-ASM['push stack'] = (
-        f"\n// ASM push stack"
-        f"\n@SP"
-        f"\nA   = M"
-        f"\n  M = D"
-        f"\n@SP"
-        f"\n  M = M + 1"
-        f"\n D  = 0 // optional safety feature"
-        ) # 5+1 lines
-"""
-
-
-###############################################################################
-# IMPLEMENTATION - OPERATIONS
-###############################################################################
-
-# y: last element of the stack
-# x: second last element of the stack
-# add: x + y
-# sub: x - y
-# neg: -y
-# eq : x == 0 (I think here it's y)
-# gt : x > y
-# lt : x < y
-# and: x and y
-# or : x or y
-# not: not y
-
-# Load/Fetch
-#   RAM = ..., x, y, *SP, ...
-
-# M = y:
-ASM['M = y'] = (
-        f"\n@SP"
-        # A points to SP - 1
-        # !! SP is unchanged
-        f"\nA   = M - 1"
-        )
-
-# M,D = x,y:
-ASM['M,D = x,y'] = (
-        # pop y to D
-        ASM['pop stack'] +
-        # A points to SP - 1
-        # !! SP still points to y, not x
-        f"\nA   = A - 1"
-        )
-
-# Arithmetic
-#   add: x + y
-#   sub: x - y
-#   neg: -y
-VM['add'] = (
-        f"\n// VM add"
-        + ASM['M,D = x,y'] +
-        f"\n  M = M + D"
-        f"\n D  = 0 // optional safety feature"
-        )
-VM['sub'] = (
-        f"\n// VM sub"
-        + ASM['M,D = x,y'] +
-        f"\n  M = M - D"
-        f"\n D  = 0 // optional safety feature"
-        )
-VM['neg'] = (
-        f"\n// VM neg"
-        + ASM['M = y'] +
-        f"\n  M = -M"
-        )
-
-# Boolean
-#   and: x and y
-#   or : x or y
-#   not: not y
-VM['and'] = (
-        f"\n// VM and"
-        + ASM['M,D = x,y'] +
-        f"\n  M = M & D"
-        f"\n D  = 0 // optional safety feature"
-        )
-VM['or'] = (
-        f"\n// VM or"
-        + ASM['M,D = x,y'] +
-        f"\n  M = M | D"
-        f"\n D  = 0 // optional safety feature"
-        )
-VM['not'] = (
-        f"\n// VM not"
-        + ASM['M = y'] +
-        f"\n  M = !M"
-        )
-
-
-# Comparison
-#   eq : x == 0 (I think here it's x == y)
-#   gt : x > y
-#   lt : x < y
-#
-# It is not possible to directly assing to A, D or M
-# the value of a comparison
-# therefore a jump must be used that requires a local label
-# therefore this label needs an index
-comparisons = {
-        "eq": "EQ",
-        "ne": "NE",
-        "lt": "LT",
-        "le": "LE",
-        "gt": "GT",
-        "ge": "GE",
-        }
-
-ASM['comparisons_index'] = 0
-
-for cmp in comparisons:
-    VM[cmp] = lambda index: (
-        f"\n// VM {cmp}"
-        + ASM['M,D = x,y'] +
-        # Compute the difference
-        f"\n D  = M - D"
-        # Default to the comparison being true
-        f"\n  M = 1"
-        # Point to skipping the comparison being false
-        f"\n@ CMP.{index}"
-        # If the comparison is true skip setting it to false
-        f"\nD; J{comparisons[cmp]}"
-        # If the comparison was false and no skip happened, set it to false
-        f"\n@SP"
-        f"\nA   = M - 1"
-        f"\n  M = 0"
-        # Create the label to jump to if condition is true
-        f"\n(CMP.{index})"
-        )
-
-
-
-
-
-###############################################################################
-#IMPLEMENTATION - ARRAY SEGMENTS
-###############################################################################
-
-segment_max = {
-        # 0:2048 = 0:2**11 are standard registers, static and the stack
-        # 2**14:2**15 is the screen buffer
-        'local'   : 2**14 - 2**11,
-        'argument': 2**14 - 2**11,
-        'this'    : 2**14 - 2**11,
-        'that'    : 2**14 - 2**11,
-        # Non array segments have different maxima
-        'temp'    : 8,              # 5:12
-        'constant': 2**15,          # any value of A instructions, 2**15:2**16 are C instruction
-        'pointer' : 2,
-        'static'  : 2**8 - 2**4,    # range 16:256 = 2**4:2**8
-        }
-
-# segment[i] = RAM[SEGMENT + i]
-
-# local   : LCL = 1
-# argument: ARG = 2
-# this    : THIS = 3
-# that    : THAT = 4
-# temp    : 5 (fixed size to 8 values)
-
-location = {
-        'local'   : 'LCL' , # 1, #
-        'argument': 'ARG' , # 2, #
-        'this'    : 'THIS', # 3, #
-        'that'    : 'THAT', # 4, #
-        'temp'    : '5'   ,
-        'address' : 'R15' ,
-        }
-
-VM['push'] = {}
-VM['pop' ] = {}
-
-ASM['register'] = lambda register, segment, i: (
-        f"\n// ASM {register} = {segment} + {i}"
-        f"\n@{segment}"
-        f"\n D  = M"
-        f"\n@{i}"
-        f"\n{register} = D + A"
-        ) # 4 lines
-
-# Temporary address variable
-# Options:
-#   @address
-#   @R13
-#   @R14
-#   @R15
-# The problem with using @address
-# is that it takes away static memory.
-# We store the choice of R13, R14 or R15
-# in location['address']
-#ASM['push address'] = (
-#        f"\n// ASM push address"
-#        f"\n@{location['address']}"
-#        f"\nA   = M"
-#        f"\n  M = D"
-#        f"\n D  = 0 // optional safety feature"
-#        )
-#
-#ASM['address'] = lambda register, segment, i: (
-#        f"\n// ASM address = {segment} + {i}"
-#        + ASM['register']("D", segment, i) +
-#        f"\n@{location['address']}"
-#        f"\n  M = D"
-#        ) # 6 lines total
-
-for segment in ['local', 'argument', 'this', 'that', 'temp']:
-    VM['push'][segment] = lambda i: (
-            f"\n// VM push {segment} {i}"
-            + ASM['register']("A", segment,i) + # 4 lines, D = segment + i
-            f"\n D  = M"
-            + ASM['push stack']                 # 4+1 lines
-            ) # 9+1 lines
-
-    # pop  implementation with accumulation:
-    # D can store address + value
-    # and the address is recovered with D - value
-    VM['pop' ][segment] = lambda i: (
-            f"\n// VM pop {segment} {i}"
-            + ASM['register']("D", segment,i) + # 4 lines, D = segment + i
-            f"\n@SP"
-            f"\nA M = M - 1"  # M = value
-            f"\n D  = D + M"  # D = segment + i + value
-            f"\nA   = D - M"  # A   = segment + i
-            f"\n  M = D - A"  # M = value
-            f"\n D  = 0     // optional safety feature"
-            f"\n@SP       // optional safety feature"
-            f"\nA   = M + 1 // optional safety feature"
-            f"\n  M = 0     // optional safety feature"
-            ) # 9+4 lines total
-#    # pop  mplementation with @address:
-#    # @address stores the address of "segment i"
-#    VM['pop' ][segment] = lambda i: (
-#            f"\n// VM pop {segment} {i}"
-#            + ASM['address'](location[segment], i)  # 6 lines
-#            + ASM['pop stack']                      # 3+1 lines
-#            + ASM['push address'] +                 # 3+1 lines
-#            f"\n@address // optional safety feature"
-#            f"\n  M = 0 // optional safety feature"
-#            ) # 12+4 lines total
-#    # pop  mplementation changing location[segment]:
-#    # We can add i to location[segment] and then subtract it again
-#    VM['pop' ][segment] = lambda i: (
-#            f"\n// VM pop  {segment} {i}"
-#            f"\n@{i}"
-#            f"\n D  = A"
-#            f"\n@{segments[segment]}"
-#            f"\n  M = M + D"
-#            + ASM['pop stack'] +                    # 3+1 lines
-#            f"\n@{segments[segment]}"
-#            f"\nA   = M"
-#            f"\n  M = D"
-#            f"\n@{i}"
-#            f"\n D  = A"
-#            f"\n@{segments[segment]}"
-#            f"\n  M = M - D"
-#            f"\n D  = 0 // optional safety feature"
-#            ) # 14+2 lines total
-#    # pop  mplementation with @SP v1:
-#    # @SP stores the address of "segment i"
-#    VM['pop' ][segment] = lambda i: (
-#            f"\n// VM pop  {segment} {i}"
-#            f"\n@{i}"
-#            f"\n D  = A"
-#            f"\n@{segments[segment]}"
-#            f"\n D  = M + D"               # D = segment i
-#            f"\n@SP"
-#            f"\nA M = M - 1"
-#            f"\nA   = A + 1"
-#            f"\n  M = D"                   # segment i in on top of the stack
-#            f"\nA   = A - 1"
-#            f"\n D  = M"                   # D = value
-#            f"\nA   = A + 1"
-#            f"\nA   = M"                   # A   = segment i
-#            f"\n  M = D"
-#            f"\n D  = 0     // optional safety feature"
-#            f"\n@SP         // optional safety feature"
-#            f"\nA   = M     // optional safety feature"
-#            f"\n  M = 0     // optional safety feature"
-#            f"\nA   = A - 1 // optional safety feature"
-#            f"\n  M = 0     // optional safety feature"
-#            ) # 13+5 lines total
-#    # pop  mplementation with @SP v2:
-#    # @SP stores the address of "segment i"
-#    VM['pop' ][segment] = lambda i: (
-#            f"\n// VM pop  {segment} {i}"
-#            f"\n@{i}"                      #  1
-#            f"\n D  = A"                   #  2
-#            f"\n@{segments[segment]}"      #  3
-#            f"\n D  = M + D"               #  4 D = segment i
-#            f"\n@SP"                       #  5
-#            f"\nA   = M"                   #  6
-#            f"\n  M = D"                   #  7 segment i in on top of the stack
-#            f"\nA   = A - 1"               #  8
-#            f"\n D  = M"                   #  9 D = value
-#            f"\nA   = A + 1"               # 10
-#            f"\nA   = M"                   # 11
-#            f"\n  M = D"                   # 12
-#            f"\n D  = 0     // optional safety feature"
-#            f"\n@SP"
-#            f"\nA M = M - 1"
-#            f"\n  M = 0     // optional safety feature"
-#            f"\nA   = A 1 1 // optional safety feature"
-#            f"\n  M = 0     // optional safety feature"
-#            ) # 14+4 lines total
-
-
-###############################################################################
-#IMPLEMENTATION - SPECIAL SEGMENTS
-###############################################################################
-
-# constant: const[i] = i (no need to actually store it)
-# pointer :
-#     another fixed memory segment of size 2
-#     pointer[0] = RAM[THIS]
-#     pointer[1] = RAM[THAT]
-# Static:
-#     predefined ARRAY with predefined location
-#     static  :
-#         will be shared by all instances of the same objects
-#         it is compiled differently
-#         static[i] becomes an assembly variable, eg, static.i
-#         automatically stored by the compiler in RAM[16] and onwards
-#         might need to take care to never exceed RAM[255] for static
-
-# CONSTANT
-
-VM['push']['constant'] = lambda i: (
-        f"\n// VM push constant {i}"
-        f"\n@{i}"
-        f"\n D  = A"
-        + ASM['push stack']     # 4+1 lines
-        ) # 6+1 lines
-
-# POINTER
-
-pointer = {0: 'THIS', 1: 'THAT'}
-
-VM['pop' ]['pointer'] = lambda i: (
-        f"\n// VM pop pointer {i}"
-        + ASM['pop stack'] +    # 3+1 lines
-        f"\n@{pointer[i]}"
-        f"\n  M = D"
-        f"\n D  = 0 // optional safety feature"
-        ) # 5+2 lines
-VM['push']['pointer'] = lambda i: (
-        f"\n// VM push pointer {i}"
-        f"\n@{pointer[i]}"
-        f"\n D  = M"
-        + ASM['push stack']     # 4+1 lines
-        ) # 6+1 lines
-
-
-# STATIC
-
-static = "static"
-
-def push_static(i):
-    return (
-        f"\n// VM push static ({static}) {i}"
-        f"\n@{static}.{i}"
-        f"\n D  = M"
-        + ASM['push stack']
-        )
-
-VM['push']['static'] = push_static
-
-def pop_static(i):
-    return (
-        f"\n// VM pop  static ({static}) {i}"
-        + ASM['pop stack'] +        # 3+1 lines
-        f"\n@{static}.{i}"
-        f"\n  M = D"
-        f"\n D  = 0 // optional safety feature"
-        ) # 5+2 lines
-
-VM['pop']['static'] = pop_static
-
-
 ###############################################################################
 # HACK Assembly Language Specification
 ###############################################################################
@@ -579,6 +144,493 @@ default_variables = {
     }
 """
 
+
+
+###############################################################################
+# IMPLEMENTATION - SETUP AND NOTES
+###############################################################################
+
+
+# INPUT FILE
+import sys
+
+# Check if input file is given
+if len(sys.argv) == 1:
+    print(
+        f"no input file provided\n"
+        f"please give a text input file "
+        f"(it will be treated as Hack assembly text file)",
+        file=sys.stderr
+        )
+    sys.exit(1)
+
+# Save input filename
+vm_filename = sys.argv[1]
+
+
+
+# OUTPUT FILE
+
+# Generate output file with .hack extension
+if vm_filename[-3:] != ".vm":
+    asm_filename = f"{vm_filename}.asm"
+    import warnings
+    warnings.warn(
+        f"Extension of input file {vm_filename} is not '.vm', "
+        f"it will still be treated as Hack assembly text file"
+        )
+else:
+    asm_filename = f"{vm_filename[:-3]}.asm"
+
+
+
+# COMPILE VARIABLES
+
+# The filename is used for label names
+# Clean vm_filename from slashes that interefere with asm code
+clean_filename = vm_filename.replace('/','_')
+
+# We use dictionaries to produce code and use them as functions
+# We split the dictionaries in
+#   the VM  dictionary: contains mapping of actual VM code
+#   the ASM dictionary: contains mapping of helper code
+
+ASM = {}
+VM = {}
+
+
+# COMPILE NOTES
+
+# We add some safety feature
+# We clear registers and memory to 0 once they have been used/freed
+# To distinguish these operations from needed assembly code
+# we distinguish these operations by  marking them with a comment, e.g.
+#   'M = 0                   // optional safety feature"
+#   'D = 0                   // optional safety feature"
+# instead of just
+#   'M = 0"
+#   'D = 0"
+
+
+###############################################################################
+# IMPLEMENTATION - STACK
+###############################################################################
+
+# Predefined LIST with predefined location,
+# we access by shifting a pointer up and down
+# StackPointer = SP = 0
+# Stack Base address RAM[SP] = RAM[0] = 256
+# SP always points to the next where to push
+# (the next "free" address)
+
+ASM['push stack'] = (
+        f"\n// ASM['push stack'] (from D)"
+        f"\n@SP"
+        f"\nA M = M + 1"
+        f"\nA   = A - 1"
+        f"\n  M = D"
+        f"\n D  = 0             // optional safety feature"
+        ) # 4+1 lines
+
+"""
+ASM['push stack'] = (
+        f"\n// ASM push stack"
+        f"\n@SP"
+        f"\nA   = M"
+        f"\n  M = D"
+        f"\n@SP"
+        f"\n  M = M + 1"
+        f"\n D  = 0             // optional safety feature"
+        ) # 5+1 lines
+"""
+
+ASM['pop stack'] = (
+        f"\n// ASM['pop stack'] (to D)"
+        f"\n@SP"
+        f"\nA M = M - 1"
+        f"\n D  = M"
+        f"\n  M = 0             // optional safety feature"
+        ) # 3+1 lines
+
+
+
+###############################################################################
+# IMPLEMENTATION - OPERATIONS
+###############################################################################
+
+# y: last element of the stack
+# x: second last element of the stack
+# add: x + y
+# sub: x - y
+# neg: -y
+# eq : x == 0 (I think here it's y)
+# gt : x > y
+# lt : x < y
+# and: x and y
+# or : x or y
+# not: not y
+
+# Load/Fetch
+#   RAM = ..., x, y, *SP, ...
+# ASM['pop stack']
+#   RAM = ..., x, *SP, ...
+#   D = y
+
+# Arithmetic
+#   add: x + y
+#   sub: x - y
+#   neg: -y
+VM['add'] = (
+        f"\n// VM add"
+        + ASM['pop stack'] +
+        f"\nA   = A - 1"
+        f"\n  M = M + D"
+        f"\n D  = 0             // optional safety feature"
+        )
+VM['sub'] = (
+        f"\n// VM sub"
+        + ASM['pop stack'] +
+        f"\nA   = A - 1"
+        f"\n  M = M - D"
+        f"\n D  = 0             // optional safety feature"
+        )
+VM['neg'] = (
+        f"\n// VM neg"
+        f"\n@SP"
+        f"\nA   = M - 1"
+        f"\n  M = -M"
+        )
+
+# Boolean
+#   and: x and y
+#   or : x or y
+#   not: not y
+VM['and'] = (
+        f"\n// VM and"
+        + ASM['pop stack'] +
+        f"\nA   = A - 1"
+        f"\n  M = M & D"
+        f"\n D  = 0             // optional safety feature"
+        )
+VM['or'] = (
+        f"\n// VM or"
+        + ASM['pop stack'] +
+        f"\nA   = A - 1"
+        f"\n  M = M | D"
+        f"\n D  = 0             // optional safety feature"
+        )
+VM['not'] = (
+        f"\n// VM not"
+        f"\n@SP"
+        f"\nA   = M - 1"
+        f"\n  M = !M"
+        )
+
+
+# Comparison
+#   eq : x == 0 (I think here it's x == y)
+#   gt : x > y
+#   lt : x < y
+#
+# It is not possible to directly assing to A, D or M
+# the value of a comparison
+# therefore a jump must be used that requires a local label
+# therefore this label needs an index
+comparisons = {
+        "eq": "EQ",
+        "ne": "NE",
+        "lt": "LT",
+        "le": "LE",
+        "gt": "GT",
+        "ge": "GE",
+        }
+
+ASM['comparisons_index'] = 0
+
+for comparison in comparisons:
+    VM[comparison] = lambda index, comparison=comparison: (
+        f"\n// VM {comparison}"
+        + ASM['pop stack'] +
+        f"\nA   = A - 1"
+        # Compute the difference
+        f"\n D  = M - D"
+        # Default x to the comparison being true
+        f"\n  M = -1"
+        # Point to skipping the comparison being false
+        f"\n@ CMP.{index}"
+        # If the comparison is true skip setting it to false
+        f"\nD; J{comparisons[comparison]}"
+        # If the comparison was false and no skip happened, set it to false
+        f"\n@SP"
+        f"\nA   = M - 1"
+        f"\n  M = 0"
+        # Create the label to jump to if condition is true
+        f"\n(CMP.{index})"
+        )
+
+
+
+
+
+###############################################################################
+#IMPLEMENTATION - ARRAY SEGMENTS
+###############################################################################
+
+segment_max = {
+        # 0:256 = 0:2**8 are standard registers and static
+        # 2**14:2**15 is the screen buffer
+        # the stack and the segments can overlap
+        'local'   : 2**14 - 2**8,
+        'argument': 2**14 - 2**8,
+        'this'    : 2**14 - 2**8,
+        'that'    : 2**14 - 2**8,
+        # Non array segments have different maxima
+        'temp'    : 8,              # 5:12
+        'constant': 2**15,          # any value of A instructions, 2**15:2**16 are C instruction
+        'pointer' : 2,
+        'static'  : 2**8 - 2**4,    # range 16:256 = 2**4:2**8
+        }
+
+# segment[i] = RAM[SEGMENT + i]
+
+# Segments:
+#   local   : LCL = 1
+#   argument: ARG = 2
+#   this    : THIS = 3
+#   that    : THAT = 4
+#   temp    : 5 (fixed size to 8 values)
+
+# Free registers:
+#   R13
+#   R14
+#   R15
+
+location = {
+        'local'   : 'LCL ', # 1, #
+        'argument': 'ARG ', # 2, #
+        'this'    : 'THIS', # 3, #
+        'that'    : 'THAT', # 4, #
+        'temp'    : '5   ',
+        'address' : 'R15 ',
+        'return'  : 'R14 ',
+        }
+
+VM['push'] = {}
+VM['pop' ] = {}
+
+# Temporary address variable
+# Options:
+#   @address
+#   @R13
+#   @R14
+#   @R15
+# The problem with using @address
+# is that it takes away static memory.
+# We store the choice of R13, R14 or R15
+# in location['address']
+#ASM['push address'] = (
+#        f"\n// ASM push address"
+#        f"\n@{location['address']}"
+#        f"\nA   = M"
+#        f"\n  M = D"
+#        f"\n D  = 0             // optional safety feature"
+#        )
+#
+#ASM['address'] = lambda register, segment, i: (
+#        f"\n// ASM address = {segment} + {i}"
+#        + ASM['register']("D", segment, i) +
+#        f"\n@{location['address']}"
+#        f"\n  M = D"
+#        ) # 6 lines total
+
+for segment in ['local', 'argument', 'this', 'that', 'temp']:
+    VM['push'][segment] = lambda i, segment=segment: (
+            f"\n// VM push {segment} {i}"
+            f"\n// A = {segment} + {i} = source"
+            f"\n@{location[segment]}"
+            f"\n D  = " + ("A" if segment=="temp" else "M") +
+            f"\n@{i}"
+            f"\nA   = D + A"
+            f"\n D  = M"
+            + ASM['push stack'] # 4+1 lines
+            ) # 9+1 lines
+
+    # pop  implementation with accumulation:
+    # D can store address + value
+    # and the address is recovered with D - value
+    VM['pop' ][segment] = lambda i, segment=segment: (
+            f"\n// VM pop {segment} {i}"
+            f"\n// D = {segment} + {i} = destination"
+            f"\n@{location[segment]}"
+            f"\n D  = " + ("A" if segment=="temp" else "M") +
+            f"\n@{i}"
+            f"\n D  = D + A"
+            # Accumulate destination and value in D                                                     |:
+            #     A = source (stack), M == value                                                        |
+            #     D = destination + value, M == value                                                   |x
+            #     A = destination, D == destination + value                                             |
+            #     M = value = D - A
+            f"\n// A = stack, M = value"
+            f"\n@SP"
+            f"\nA M = M - 1"
+            f"\n// D = destination + value"
+            f"\n D  = D + M"
+            f"\n// A = destination, M = ?"
+            f"\nA   = D - M"
+            f"\n// A = destination, M = value"
+            f"\n  M = D - A"
+            f"\n D  = 0         // optional safety feature"
+            f"\n@SP             // optional safety feature"
+            f"\nA   = M         // optional safety feature"
+            f"\n  M = 0         // optional safety feature"
+            ) # 9+4 lines total
+#    # pop  iplementation with @address:
+#    # @address stores the address of "segment i"
+#    VM['pop' ][segment] = lambda i: (
+#            f"\n// VM pop {segment} {i}"
+#            + ASM['address'](location[segment], i)  # 6 lines
+#            + ASM['pop stack']                      # 3+1 lines
+#            + ASM['push address'] +                 # 3+1 lines
+#            f"\n@address        // optional safety feature"
+#            f"\n  M = 0         // optional safety feature"
+#            ) # 12+4 lines total
+#    # pop  iplementation changing location[segment]:
+#    # We can add i to location[segment] and then subtract it again
+#    VM['pop' ][segment] = lambda i: (
+#            f"\n// VM pop  {segment} {i}"
+#            f"\n@{i}"
+#            f"\n D  = A"
+#            f"\n@{location[segment]}"
+#            f"\n  M = M + D"
+#            + ASM['pop stack'] +                    # 3+1 lines
+#            f"\n@{location[segment]}"
+#            f"\nA   = M"
+#            f"\n  M = D"
+#            f"\n@{i}"
+#            f"\n D  = A"
+#            f"\n@{location[segment]}"
+#            f"\n  M = M - D"
+#            f"\n D  = 0         // optional safety feature"
+#            ) # 14+2 lines total
+#    # pop  mplementation with @SP v1:
+#    # @SP stores the address of "segment i"
+#    VM['pop' ][segment] = lambda i: (
+#            f"\n// VM pop  {segment} {i}"
+#            f"\n@{i}"
+#            f"\n D  = A"
+#            f"\n@{location[segment]}"
+#            f"\n D  = M + D"               # D = segment i
+#            f"\n@SP"
+#            f"\nA M = M - 1"
+#            f"\nA   = A + 1"
+#            f"\n  M = D"                   # segment i in on top of the stack
+#            f"\nA   = A - 1"
+#            f"\n D  = M"                   # D = value
+#            f"\nA   = A + 1"
+#            f"\nA   = M"                   # A   = segment i
+#            f"\n  M = D"
+#            f"\n D  = 0         // optional safety feature"
+#            f"\n@SP             // optional safety feature"
+#            f"\nA   = M         // optional safety feature"
+#            f"\n  M = 0         // optional safety feature"
+#            f"\nA   = A - 1     // optional safety feature"
+#            f"\n  M = 0         // optional safety feature"
+#            ) # 13+5 lines total
+#    # pop  mplementation with @SP v2:
+#    # @SP stores the address of "segment i"
+#    VM['pop' ][segment] = lambda i: (
+#            f"\n// VM pop  {segment} {i}"
+#            f"\n@{i}"                      #  1
+#            f"\n D  = A"                   #  2
+#            f"\n@{location[segment]}"      #  3
+#            f"\n D  = M + D"               #  4 D = segment i
+#            f"\n@SP"                       #  5
+#            f"\nA   = M"                   #  6
+#            f"\n  M = D"                   #  7 segment i in on top of the stack
+#            f"\nA   = A - 1"               #  8
+#            f"\n D  = M"                   #  9 D = value
+#            f"\nA   = A + 1"               # 10
+#            f"\nA   = M"                   # 11
+#            f"\n  M = D"                   # 12
+#            f"\n D  = 0         // optional safety feature"
+#            f"\n@SP"
+#            f"\nA M = M - 1"
+#            f"\n  M = 0         // optional safety feature"
+#            f"\nA   = A 1 1     // optional safety feature"
+#            f"\n  M = 0         // optional safety feature"
+#            ) # 14+4 lines total
+
+
+###############################################################################
+#IMPLEMENTATION - SPECIAL SEGMENTS
+###############################################################################
+
+# constant: const[i] = i (no need to actually store it)
+# pointer :
+#     another fixed memory segment of size 2
+#     pointer[0] = RAM[THIS]
+#     pointer[1] = RAM[THAT]
+# Static:
+#     predefined ARRAY with predefined location
+#     static  :
+#         will be shared by all instances of the same objects
+#         it is compiled differently
+#         static[i] becomes an assembly variable, eg, static.i
+#         automatically stored by the compiler in RAM[16] and onwards
+#         might need to take care to never exceed RAM[255] for static
+
+
+# POINTER
+
+pointer = {0: 'THIS', 1: 'THAT'}
+
+VM['pop' ]['pointer'] = lambda i: (
+        f"\n// VM pop pointer {i}"
+        + ASM['pop stack'] +    # 3+1 lines
+        f"\n@{pointer[i]}"
+        f"\n  M = D"
+        f"\n D  = 0             // optional safety feature"
+        ) # 5+2 lines
+
+VM['push']['pointer'] = lambda i: (
+        f"\n// VM push pointer {i}"
+        f"\n@{pointer[i]}"
+        f"\n D  = M"
+        + ASM['push stack']     # 4+1 lines
+        ) # 6+1 lines
+
+
+# STATIC
+
+# Set the name of the ASM variable for static for this file
+static = f"static.{clean_filename}"
+
+VM['push']['static'] = lambda i: (
+        f"\n// VM push static ({static}) {i}"
+        f"\n@{static}.{i}"
+        f"\n D  = M"
+        + ASM['push stack']
+        )
+
+VM['pop']['static'] = lambda i : (
+        f"\n// VM pop  static ({static}) {i}"
+        + ASM['pop stack'] +        # 3+1 lines
+        f"\n@{static}.{i}"
+        f"\n  M = D"
+        f"\n D  = 0             // optional safety feature"
+        ) # 5+2 lines
+
+
+# CONSTANT
+
+VM['push']['constant'] = lambda i: (
+        f"\n// VM push constant {i}"
+        f"\n@{i}"
+        f"\n D  = A"
+        + ASM['push stack']     # 4+1 lines
+        ) # 6+1 lines
+
+
 ###############################################################################
 # TOOLS
 ###############################################################################
@@ -594,6 +646,7 @@ def clean_line(line):
 ###############################################################################
 
 def compile_line(line):
+
     # Split all spaces
     split = line.split()
 
@@ -603,13 +656,14 @@ def compile_line(line):
         return compile_segment(split[0], split[1], split[2])
 
     raise SyntaxError(f"{line}: wrong number of words."
-                      "\nAn operation line must contain a single word."
-                      "\nA segment line must contain 2 words and a number."
+                      f"\nAn operation line must contain a single word."
+                      f"\nA segment line must contain 2 words and a number."
                       )
 
 
 def compile_operation(operation):
 
+    comparison = operation
     try:
         operation = VM[operation]
     except:
@@ -675,45 +729,9 @@ def compile_vm_to_asm(vm_filename, asm_filename, debug=False):
 
 
 ###############################################################################
-# COMPILER
+# COMPILE
 ###############################################################################
 
-# INPUT FILE
-import sys
-
-# Check if input file is given
-if len(sys.argv) == 1:
-    print(
-        "no input file provided\n"
-        "please give a text input file "
-        "(it will be treated as Hack assembly text file)",
-        file=sys.stderr
-        )
-    sys.exit(1)
-
-# Save input filename
-vm_filename = sys.argv[1]
-
-
-
-# OUTPUT FILE
-
-# Generate output file with .hack extension
-if vm_filename[-3:] != ".vm":
-    asm_filename = f"{vm_filename}.asm"
-    import warnings
-    warnings.warn(
-        f"Extension of input file {vm_filename} is not '.vm', "
-        "it will still be treated as Hack assembly text file"
-        )
-else:
-    asm_filename = f"{vm_filename[:-3]}.asm"
-
-
-# COMPILE
-
-# Set the name of the ASM variable for static for this file
-static = f"static.{vm_filename}"
 
 # Compile Hack virtual machine code to Hack assembly language
 compile_vm_to_asm(vm_filename, asm_filename, debug=True)
