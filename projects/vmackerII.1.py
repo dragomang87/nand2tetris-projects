@@ -258,25 +258,29 @@ ASM['pop stack'] = (
 # IMPLEMENTATION - OPERATIONS
 ###############################################################################
 
-# y: last element of the stack
-# x: second last element of the stack
-# add: x + y
-# sub: x - y
-# neg: -y
-# eq : x == 0 (I think here it's y)
-# gt : x > y
-# lt : x < y
-# and: x and y
-# or : x or y
-# not: not y
+# CONVENTIONS
+# (mentioned in nand2tetris I and omitted in II.1)
+#   false =  0
+#   true  = -1
+#   y     = last element of the stack
+#   x     = second last element of the stack
 
-# Load/Fetch
-#   RAM = ..., x, y, *SP, ...
-# ASM['pop stack']
-#   RAM = ..., x, *SP, ...
-#   D = y
+# OPERATIONS
+#   add: x + y
+#   sub: x - y
+#   neg: -y
+#   eq : x == 0 (I think here it's y)
+#   gt : x > y
+#   lt : x < y
+#   and: x and y
+#   or : x or y
+#   not: not y
 
-# Arithmetic
+
+
+# IMPLEMENTATIONS
+
+# ARITHMETICS
 #   add: x + y
 #   sub: x - y
 #   neg: -y
@@ -301,7 +305,7 @@ VM['neg'] = (
         f"\n  M = -M"
         )
 
-# Boolean
+# BOOLEANS
 #   and: x and y
 #   or : x or y
 #   not: not y
@@ -327,15 +331,11 @@ VM['not'] = (
         )
 
 
-# Comparison
+# COMPARISONS
 #   eq : x == 0 (I think here it's x == y)
 #   gt : x > y
 #   lt : x < y
-#
-# It is not possible to directly assing to A, D or M
-# the value of a comparison
-# therefore a jump must be used that requires a local label
-# therefore this label needs an index
+
 comparisons = {
         "eq": "EQ",
         "ne": "NE",
@@ -347,6 +347,11 @@ comparisons = {
 
 ASM['comparisons_index'] = 0
 
+# Implementation:
+# It is not possible to directly assing to A, D or M
+# the value of a comparison
+# therefore a jump must be used that requires a local label
+# therefore this label needs an index
 for comparison in comparisons:
     VM[comparison] = lambda index, comparison=comparison: (
         f"\n// VM {comparison}"
@@ -357,7 +362,7 @@ for comparison in comparisons:
         # Default x to the comparison being true
         f"\n  M = -1"
         # Point to skipping the comparison being false
-        f"\n@ CMP.{index}"
+        f"\n@compare_label.{index}"
         # If the comparison is true skip setting it to false
         f"\nD; J{comparisons[comparison]}"
         # If the comparison was false and no skip happened, set it to false
@@ -365,7 +370,7 @@ for comparison in comparisons:
         f"\nA   = M - 1"
         f"\n  M = 0"
         # Create the label to jump to if condition is true
-        f"\n(CMP.{index})"
+        f"\n(compare_label.{index})"
         )
 
 
