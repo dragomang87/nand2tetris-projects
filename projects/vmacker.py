@@ -186,7 +186,6 @@ default_variables = {
 # INPUT FILE
 import sys
 
-'''
 # Check if input file is given
 if len(sys.argv) == 1:
     print(
@@ -199,8 +198,8 @@ if len(sys.argv) == 1:
 
 # Save input filename
 vm_filename = sys.argv[1]
-'''
-vm_filename = "bla"
+
+
 
 # OUTPUT FILE
 
@@ -223,14 +222,6 @@ else:
 # Clean vm_filename from slashes that interefere with asm code
 clean_filename = vm_filename.replace('/','_')
 
-# Some labels used in ASM code, function calls, etc
-# are not global but unique label to the specific
-# instance of the ASM code, call, etc
-# So we keep track of how many of these labels are produced
-# to give them a unique value using an instance index
-
-n_instance_labels = 0
-
 # We use dictionaries to produce code and use them as functions
 # We split the dictionaries in
 #   the VM  dictionary: contains mapping of actual VM code
@@ -238,6 +229,15 @@ n_instance_labels = 0
 
 ASM = {}
 VM = {}
+
+# Some labels used in ASM code, function calls, etc
+# are not global but unique label to the specific
+# instance of the ASM code, call, etc
+# So we keep track of how many of these labels are produced
+# to give them a unique value using an instance index
+
+ASM['instance_label_index'] = 0
+instance_label = lambda: "instance_label_{ASM['instance_label_index']}"
 
 
 # COMPILE NOTES
@@ -251,7 +251,9 @@ VM = {}
 # instead of just
 #   'M = 0"
 #   'D = 0"
-
+# If D is used to jump (comparisons or if-goto commands)
+# then we leave D as it is instead of inntroducing
+# state dependent behaviour (D=0 only when the jump is not made
 
 ###############################################################################
 # IMPLEMENTATION - STACK
@@ -295,7 +297,23 @@ ASM['pop stack'] = (
         f"\n  M = 0             // optional safety feature"
         ) # 3+1 lines
 
-AM['move stack' ] = (
+ASM['pop sum'  ] = (
+        f"\n// ASM['pop sum'] (to D)"
+        f"\n@SP"
+        f"\nA M = M - 1"
+        f"\n D  = D + M"
+        f"\n  M = 0             // optional safety feature"
+        ) # 3+1 lines
+
+ASM['pop sub'  ] = (
+        f"\n// ASM['pop sub'] (to D)"
+        f"\n@SP"
+        f"\nA M = M - 1"
+        f"\n D  = D - M"
+        f"\n  M = 0             // optional safety feature"
+        ) # 3+1 lines
+
+ASM['move stack' ] = (
         f"\n// ASM['move stack']"
         f"\n// D = destination"
         # Like pop, but D contains the destination address
@@ -374,7 +392,7 @@ ASM['delete stack to D'] = lambda instance_label: (
 #       - on exit do SP++
 #   - if D >= SP then nothing happens
 '''
-ASM['delete stack until'] = lambda instance_label: (
+ASM['delete stack to D'] = lambda instance_label: (
         f"\n// ASM['clear stack'] (until address D)"
         f"\n// (clear to zero until address D included)"
         f"\n// START optional safety feature"
@@ -401,25 +419,29 @@ ASM['delete stack until'] = lambda instance_label: (
 # IMPLEMENTATION - OPERATIONS
 ###############################################################################
 
-# y: last element of the stack
-# x: second last element of the stack
-# add: x + y
-# sub: x - y
-# neg: -y
-# eq : x == 0 (I think here it's y)
-# gt : x > y
-# lt : x < y
-# and: x and y
-# or : x or y
-# not: not y
+# CONVENTIONS
+# (mentioned in nand2tetris I and omitted in II.1)
+#   false =  0
+#   true  = -1
+#   y     = last element of the stack
+#   x     = second last element of the stack
 
-# Load/Fetch
-#   RAM = ..., x, y, *SP, ...
-# ASM['pop stack']
-#   RAM = ..., x, *SP, ...
-#   D = y
+# OPERATIONS
+#   add: x + y
+#   sub: x - y
+#   neg: -y
+#   eq : x == 0 (I think here it's y)
+#   gt : x > y
+#   lt : x < y
+#   and: x and y
+#   or : x or y
+#   not: not y
 
-# Arithmetic
+
+
+# IMPLEMENTATIONS
+
+# ARITHMETICS
 #   add: x + y
 #   sub: x - y
 #   neg: -y
@@ -444,7 +466,7 @@ VM['neg'] = (
         f"\n  M = -M"
         )
 
-# Boolean
+# BOOLEANS
 #   and: x and y
 #   or : x or y
 #   not: not y
@@ -470,26 +492,25 @@ VM['not'] = (
         )
 
 
-# Comparison
+# COMPARISONS
 #   eq : x == 0 (I think here it's x == y)
 #   gt : x > y
 #   lt : x < y
-#
+
+comparisons = {
+        'eq': "EQ",
+        'ne': "NE",
+        'lt': "LT",
+        'le': "LE",
+        'gt': "GT",
+        'ge': "GE",
+        }
+
+# Implementation:
 # It is not possible to directly assing to A, D or M
 # the value of a comparison
 # therefore a jump must be used that requires a local label
 # therefore this label needs an index
-comparisons = {
-        "eq": "EQ",
-        "ne": "NE",
-        "lt": "LT",
-        "le": "LE",
-        "gt": "GT",
-        "ge": "GE",
-        }
-
-ASM['comparisons_index'] = 0
-
 for comparison in comparisons:
     VM[comparison] = lambda instance_label, comparison=comparison: (
         f"\n// VM {comparison}"
@@ -509,7 +530,7 @@ for comparison in comparisons:
         f"\n  M = 0"
         # Create the label to jump to if condition is true
         f"\n(compare_label.{clean_filename}.{comparison}.{instance_label})"
-        )
+        ) # 11+2 lines (one label)
 
 
 
@@ -519,26 +540,9 @@ for comparison in comparisons:
 #IMPLEMENTATION - ARRAY SEGMENTS
 ###############################################################################
 
-segment_max = {
-        # 0:256 = 0:2**8 are standard registers and static
-        # 2**14:2**15 is the screen buffer
-        # the stack and the segments can overlap
-        'local'   : 2**14 - 2**8,
-        'argument': 2**14 - 2**8,
-        'this'    : 2**14 - 2**8,
-        'that'    : 2**14 - 2**8,
-        # Non array segments have different maxima
-        'temp'    : 8,              # 5:12
-        'constant': 2**15,          # any value of A instructions, 2**15:2**16 are C instruction
-        'pointer' : 2,
-        'static'  : 2**8 - 2**4,    # range 16:256 = 2**4:2**8
-        }
-
-# segment[i] = RAM[SEGMENT + i]
-
 # Segments:
-#   local   : LCL = 1
-#   argument: ARG = 2
+#   local   : LCL  = 1
+#   argument: ARG  = 2
 #   this    : THIS = 3
 #   that    : THAT = 4
 #   temp    : 5 (fixed size to 8 values)
@@ -558,10 +562,39 @@ location = {
         'return'  : 'R14 ',
         }
 
+segment_max = {
+        # 0:256 = 0:2**8 are standard registers and static
+        # 2**14:2**15 is the screen buffer
+        # the stack and the segments can overlap
+        'local'   : 2**14 - 2**8,
+        'argument': 2**14 - 2**8,
+        'this'    : 2**14 - 2**8,
+        'that'    : 2**14 - 2**8,
+        # Non array segments have different maxima
+        'temp'    : 8,              # 5:12
+        'constant': 2**15,          # any value of A instructions, 2**15:2**16 are C instruction
+        'pointer' : 2,
+        'static'  : 2**8 - 2**4,    # range 16:256 = 2**4:2**8
+        }
+
+# segment[i] = RAM[SEGMENT + i]
+
+VM['fetch'] = {}
 VM['push'] = {}
 VM['pop' ] = {}
 
 for segment in ['local', 'argument', 'this', 'that', 'temp']:
+    VM['fetch'][segment] = lambda i, segment=segment: (
+            f"\n// ASM['address']['{segment}']({i})"
+            f"\n// A = {segment} + {i} = source"
+            f"\n@{location[segment]}"
+            f"\n D  = " + ("A" if segment=="temp" else "M") +
+            f"\n@{i}"
+            f"\nA   = D + A"
+            f"\n D  = M"
+            f"\n M  = 0         // optional safety feature"
+            ) # 5+1 lines
+
     VM['push'][segment] = lambda i, segment=segment: (
             f"\n// VM push {segment} {i}"
             f"\n// A = {segment} + {i} = source"
@@ -570,8 +603,9 @@ for segment in ['local', 'argument', 'this', 'that', 'temp']:
             f"\n@{i}"
             f"\nA   = D + A"
             f"\n D  = M"
+            f"\n M  = 0         // optional safety feature"
             + ASM['push stack'] # 4+1 lines
-            ) # 9+1 lines
+            ) # 9+2 lines
 
     VM['pop' ][segment] = lambda i, segment=segment: (
             f"\n// VM pop {segment} {i}"
@@ -621,7 +655,9 @@ ASM['move'] = lambda from_segment, i, to_segment, j: (
         f"\n@R15            // optional safety feature"
         f"\nA   = M         // optional safety feature"
         f"\n  M = 0         // optional safety feature"
-        ) # 14+4 lines total instead of 18+5
+        ) # 14+5 lines total instead of 18+5
+
+'''
 
 # Implementation 3:
 #   - get destination
@@ -756,6 +792,8 @@ ASM['move'] = lambda from_segment, i, to_segment, j: (
         f"\n  M = 0         // optional safety feature"
         ) # 14+6 lines total instead of 18+5
 
+'''
+
 ###############################################################################
 #IMPLEMENTATION - SPECIAL SEGMENTS
 ###############################################################################
@@ -773,13 +811,6 @@ ASM['move'] = lambda from_segment, i, to_segment, j: (
 #         static[i] becomes an assembly variable, eg, static.i
 #         automatically stored by the compiler in RAM[16] and onwards
 #         might need to take care to never exceed RAM[255] for static
-
-# CONSTANT
-
-VM['push']['constant'] = lambda i: (
-        f"\n// VM push constant {i}"
-        + ASM['push value'](i)     # 6+1 lines
-        ) # 6+1 lines
 
 # POINTER
 
@@ -822,9 +853,7 @@ VM['pop']['static'] = lambda i : (
 
 VM['push']['constant'] = lambda i: (
         f"\n// VM push constant {i}"
-        f"\n@{i}"
-        f"\n D  = A"
-        + ASM['push stack']     # 4+1 lines
+        + ASM['push value'](i)     # 6+1 lines
         ) # 6+1 lines
 
 
@@ -838,79 +867,138 @@ vm_labels = {}
 
 #!!! Are VM labels file independent??? TODO
 
-def vm_label(label):
-    return (
+VM['label'] = lambda label: (
         f"\n// VM label {label}"
         f"\n(vm_label.{clean_filename}.{label})"
         ) # 1 ASM line, 0 HACK lines
 
-VM['label'] = vm_label
 
-def vm_goto(label):
-    return (
+VM['goto' ] = lambda label: (
         f"\n// VM goto {label}"
         f"\n@vm_label.{clean_filename}.{label}"
         f"\nJMP"
         ) # 2 lines
 
-VM['goto' ] = vm_goto
-
-ASM['if'] = {}
-for comparison in comparisons:
-    ASM['if'][comparison] = {}
-    ASM['if'][comparison]["stack"] = lambda label, comparison=comparison: (
-            f"\n// ASM['if']['{comparison}']"
-            + ASM['M,D = x,y'] +
-            # Compute the difference
-            f"\n D  = M - D"
-            # Prepare jump label
-            f"\n@vm_label.{clean_filename}.{label}"
-            # Conditional jump
-            f"\nD; J{comparisons[comparison]}"
-            f"\n D  = 0         // optional safety feature, false only"
-            )
-
-#    for segment in segment
-#        ASM['if'][comparison][segment]
-
-
-def vm_if_goto(label):
-    return (
+VM['if-goto'] = lambda label: (
         f"\n// VM goto {label}"
         + ASM['pop stack'] +    # 3+1 lines
         f"\n@vm_label.{clean_filename}.{label}"
         f"\nD; JMP"
-        f"\n D  = 0             // optional safety feature, false only"
         ) # 5+2 lines
 
-VM['if-goto'] = vm_if_goto
+
+# If a comparison happens just before 'if-goto'
+# then we can save 8 lines
+# because comparisons and jumps are one operation in machine code
+#   push      :  9+2 ASM lines
+#   comparison: 11+1 ASM lines
+#   if-goto   :  5+2 lines
+
+ASM['if'] = {}
+ASM['if push'] = {}
+for comparison in comparisons:
+    ASM['if'][comparison] = {}
+    ASM['if'][comparison]["stack"] = lambda label, comparison=comparison: (
+            f"\n// ASM['if']['{comparison}']"
+            f"\n// point stack to x and put it in D"
+            f"\n@SP"
+            f"\n  M = M - 1"
+            f"\nA M = M - 1"
+            f"\n D  = M" # x
+            f"\n M  = 0         // optional safety feature"
+            f"\n// point stack to y and compute the difference"
+            f"\nA   = A + 1"
+            f"\n D  = D - M" # x - y
+            f"\n M  = 0         // optional safety feature"
+            # Prepare jump label
+            f"\n@vm_label.{clean_filename}.{label}"
+            # Conditional jump
+            f"\nD; J{comparisons[comparison]}"
+            ) # 8+2 lines instead of 16+3
 
 
-'''
-    try:
-        float(label)
-    # return the label otherwise
-    except:
-        return label
-    # raise an error if it is a number
-    else:
-        raise ValueError("LABEL in (LABEL) declaration cannot be a number")
-'''
+for segment in ['local', 'argument', 'this', 'that', 'temp']:
+    ASM['if'][segment   ] = {}
+    ASM['if']['pointer' ] = {}
+    ASM['if']['static'  ] = {}
+    ASM['if']['constant'] = {}
+    for comparison in comparisons:
+        ASM['if'][segment][comparison] = lambda label, i, segment=segment, comparison=comparison: (
+                f"\n// A = {segment} + {i} = source"
+                f"\n@{location[segment]}"
+                f"\n D  = " + ("A" if segment=="temp" else "M") +
+                f"\n@{i}"
+                f"\nA   = D + A"
+                f"\n D  = M"
+                f"\n M  = 0         // optional safety feature"
+                f"\n@SP"
+                f"\nA M = M - 1"
+                f"\n D  = M - D"
+                f"\n M  = 0         // optional safety feature"
+                # Prepare jump label
+                f"\n@vm_label.{clean_filename}.{label}"
+                # Conditional jump
+                f"\nD; J{comparisons[comparison]}"
+                ) # 10+2 lines instead of 25+5
+    ASM['if']['pointer' ][comparison] = lambda label, i, segment=segment, comparison=comparison: (
+            f"\n@{pointer[i]}"
+            f"\n D  = M"
+            f"\n@SP"
+            f"\nA M = M - 1"
+            f"\n D  = M - D"
+            f"\n M  = 0         // optional safety feature"
+            # Prepare jump label
+            f"\n@vm_label.{clean_filename}.{label}"
+            # Conditional jump
+            f"\nD; J{comparisons[comparison]}"
+            ) # 7+2 lines
+    ASM['if']['static'  ][comparison] = lambda label, i, segment=segment, comparison=comparison: (
+            f"\n@{static}.{i}"
+            f"\n D  = M"
+            f"\n@SP"
+            f"\nA M = M - 1"
+            f"\n D  = M - D"
+            f"\n M  = 0         // optional safety feature"
+            # Prepare jump label
+            f"\n@vm_label.{clean_filename}.{label}"
+            # Conditional jump
+            f"\nD; J{comparisons[comparison]}"
+            ) # 7+2 lines
+    ASM['if']['constant'][comparison] = lambda label, i, segment=segment, comparison=comparison: (
+            f"\n@{i}"
+            f"\n D  = A"
+            f"\n@SP"
+            f"\nA M = M - 1"
+            f"\n D  = M - D"
+            f"\n M  = 0         // optional safety feature"
+            # Prepare jump label
+            f"\n@vm_label.{clean_filename}.{label}"
+            # Conditional jump
+            f"\nD; J{comparisons[comparison]}"
+            ) # 7+2 lines
+
+
+
+
 
 ###############################################################################
 # IMPLEMENTATION - BRANCHING
 ###############################################################################
 
 
+function_label = lambda name: f"{clean_filename}." + name.replace('/','_')
 
-
-def vm_call(functionname, n_arguments, instance_label):
-    return (
-        f"\n// VM call {function_name} {n_arguments}"
-        + ASM['push value']("return_label.{clean_filename}.{functionname}.{instance_label}") +
-        + ASM['push ram']("LCL" ) +
-        + ASM['push ram']("ARG" ) +
-        + ASM['push ram']("THIS") +
+VM['call'] = lambda name, n_arguments, instance_label: (
+        f"\n// VM call {name} {n_arguments}"
+        # Make sure the number of arguments is at least 1
+        # (convention says that the return value is in ARG[0])
+        + (
+        f"\n@SP"
+        f"\n  M = M + 1" if n_arguments == 0 else "")
+        + ASM['push value'](f"return_label.{function_label(name)}.{instance_label}")
+        + ASM['push ram']("LCL" )
+        + ASM['push ram']("ARG" )
+        + ASM['push ram']("THIS")
         + ASM['push ram']("THAT") +
         # A == SP
         f"\n// function LCL = SP"
@@ -920,22 +1008,22 @@ def vm_call(functionname, n_arguments, instance_label):
         f"\n// function ARG = SP - n_frame - n_arguments = SP - 5 - {n_arguments}"
         f"\n@5"
         f"\n D  = D - A"
-        f"\n@{n_arguments}"
+        # Now the number of arguments is at least 1
+        f"\n@{min(n_arguments,1)}"
         f"\n D  = D - A"
         f"\n@ARG"
         f"\n  M = D"
         f"\n D  = 0             // optional safety feature"
-        f"\n@function_label.{clean_filename}.{functionname}"
+        f"\n@function_label.{function_label(name)}"
         f"\nJMP"
-        f"\n(return_label.{clean_filename}.{functionname}.{instance_label})"
+        f"\n(return_label.{function_label(name)}.{instance_label})"
         )
 
-VM['call'] = vm_call
 
 def vm_function(name, n_locals):
     return (
         f"\n// VM function {name} {n_locals}"
-        f"\n(function_label.{clean_filename}.{name})"
+        f"\n(function_label.{function_label(name)})"
         f"\n@{n_locals}"
         f"\n D  = A"
         f"\n@SP"
@@ -954,7 +1042,7 @@ def vm_return(instance_label):
         f"\n// Clear the stack until LCL[0]"
         f"\n@LCL"
         f"\n D  = M"
-        + ASM['delete stack to D'](intance + ".local") +     # 12 lines
+        + ASM['delete stack to D'](instance_label + ".local") +     # 12 lines
         # SP points to calleeLCL - 1 -> callerTHAT
         # Make the stack skip the saved frame
         # (we can still return to the saved frame with LCL)
@@ -966,9 +1054,6 @@ def vm_return(instance_label):
         f"\n@ARG"
         f"\n D  = M + 1"
         + ASM['delete stack to D'](instance_label + ".argument") +     # 12 lines
-        # SP points to ARG but has to point to ARG + 1
-        f"\n@SP"
-        f"\n  M = M + 1"
         # LCL still point to after the saved frame
         f"\n// Return to saved frame and recover THAT"
         f"\n@LCL"
@@ -1045,7 +1130,216 @@ def vm_return(instance_label):
 VM['return'] = vm_return
 
 ###############################################################################
-# TOOLS
+# Compile Functions
+###############################################################################
+
+# Compile logic:
+#   - cannot check for which functions the returns are associated with
+#     because there can be different return inside different branches
+#   - without return cannot check which pop and push are inside the function
+
+
+
+# Instance labels
+# VM:
+#   eq, lt, gt, ne, ge, le: 0 args
+#   return, call          : 0 and 2 args
+# ASM
+#   'delete stack to D'
+
+# Command syntax
+#   1 word : add, sub, neg, or, and, not, eq, lt, gt, ne, ge, le, return
+#   2 words: label, goto, if-goto
+#   3 words: call, function, pop, push
+
+# Command types:
+#   strings     : add, sub, neg, or, and, not,
+#   dict        : push, pop
+#       function 1: push/pop segment
+#   function 1  : return, label, goto, if-goto, eq, lt, gt, ne, ge, le
+#   function 2  : function
+#   function 3  : call
+
+def compile_line(line):
+    # Split all spaces
+    split = line.split()
+    # Get the command
+    command = split[0]
+    # Check for invalid command
+    if command not in VM.keys():
+        print("Valid commands:", VM.keys())
+        raise SyntaxError(f"{command}: invalid command, must be one of the above")
+    # Compile single command
+    if len(split) == 1:
+        if command in [
+                'add', 'sub', 'neg',
+                'or' , 'and', 'not',
+                'eq' , 'lt' , 'gt' ,
+                'ne' , 'ge' , 'le' ,
+                'return',
+                ]:
+            return compile_single_command(command)
+        # If it's one of the other commands then arguments are missing
+        raise SyntaxError(f"{line} ...: missing one or two arguments")
+    # Compile commands with one argument
+    if len(split) == 2:
+        if command in ['label', 'goto', 'if-goto']:
+            return compile_branching(
+                    command, split[1]
+                    )
+        if command in ['call', 'function', 'pop', 'push']:
+            raise SyntaxError(f"{line} ...: missing one argument")
+        # If other command then argument split[1] should not be there
+        raise SyntaxError(f"{line}: {command} takes no arguments")
+    # Compile commands with two arguments
+    if len(split) == 3:
+        if command in ['call', 'function']:
+            return compile_function_and_call(
+                    command, split[1], split[2]
+                    )
+        if command in ['push', 'pop']:
+            return compile_segment(
+                    command, split[1], split[2]
+                    )
+        if command in ['label', 'goto', 'if-goto']:
+            raise SyntaxError(f"{line}: {command} takes only one argument")
+        # If other command then argument split[1] and split[2] should not be there
+        raise SyntaxError(f"{line}: {command} takes no arguments")
+    # Reject commands with more arguments
+    raise SyntaxError(
+            f"{line}: wrong number of words for a VM command, max 3 words allowed."
+            f"\n   An operation line   must contain a single keyword."
+            f"\n   A segment   command must contain 2 keywords and a number."
+            f"\n   A branching command must contain 1 keyword  and a label."
+            f"\n   'call' and 'function' must be followed by 1 name and 1 positive integer."
+            f"\n   A return command contains only 'return'."
+            )
+
+
+def compile_single_command(command):
+
+    if isinstance(VM[command], str):
+        return VM[command]
+    else:
+        ASM['instance_label_index'] += 1
+        return VM[command](instance_label())
+
+
+ASM['labels'] = {}
+ASM['jumps' ] = {}
+def compile_branching(command, label):
+
+    # Make sure the label is valid
+    try:
+        float(label)
+    except ValueError:
+        pass
+    else:
+        # raise an error if it is a number
+        raise ValueError(f"{command} {label}: label '{label}' "
+                         f"in branching command {command} cannot be a number")
+    # Keep track of defined and used labels
+    if command == 'label':
+        ASM['labels'][label] = True
+        # Return the compiled code
+        return VM['label'](label.replace("/", "_"))
+    else:
+        ASM['jumps' ][label] = True
+        # Return the compiled code
+        return VM[command](label.replace("/", "_"))
+
+
+ASM['functions'] = {}
+ASM['calls'    ] = {}
+def compile_function_and_call(command, vm_name, n):
+
+    # Make sure the vm_name is valid
+    try:
+        float(vm_name)
+    except ValueError:
+        pass
+    else:
+        # raise an error if the vm_name is a number
+        raise SyntaxError(
+                f"{command} {vm_name} {n}: name '{vm_name}' "
+                f"in command {command} cannot be a number")
+    # Make sure the third argument is a non-negative integer
+    try:
+        n = int(n)
+        assert(n >= 0)
+    except:
+        raise ValueError(f"{command} {vm_name} {n}: {n} is negative")
+
+    # Produce the ASM name of the function to track calls and definition
+    asm_name = function_label(vm_name)
+
+    # Compile 'call'
+    if command == 'call':
+        # Make sure the number of arguments is less than the maximum
+        # (which would still run out of RAM)
+        try:
+            assert(n < segment_max['argument'])
+        except:
+            raise ValueError(
+                    f"{command} {vm_name} {n}: the number of arguments "
+                    f"must be below {segment_max['argument']}.\n"
+                    f"At least one argument is needed to return the output.")
+        # Make sure to have the function name in the list of function calls
+        # and that it is called with always the same arguments
+        if asm_name not in ASM['calls']:
+            ASM['calls'][asm_name] = n
+        elif not ASM['calls'][asm_name] == n:
+            raise SyntaxError(
+                    f"{command} {vm_name} {n}: function {vm_name} "
+                    f"previously called with {ASM['calls'][asm_name]} "
+                    f"arguments and now called with {n} arguments instead."
+                    )
+        # Compile the code
+        ASM['instance_label_index'] += 1
+        # Return the compiled code
+        return VM['call'](vm_name, n, instance_label())
+
+    # Compile 'function'
+    if command == 'function':
+        # Check if the function was defined already
+        if asm_name in ASM['functions']:
+            raise SyntaxError(f"function {vm_name} already defined")
+        # Add the name to the list of defined functions
+        # with the number of local variables to check for overflow
+        ASM['functions'][asm_name] = True
+        # Return the compiled code
+        return VM['function'](vm_name, n)
+
+
+
+def compile_segment(move, segment, i):
+
+    # Make sure the segment is valid
+    if segment not in VM[move].keys():
+        print("Valid segments:", VM[move].keys())
+        raise SyntaxError(
+                f"{segment}: invalid segment, must be one of the above")
+    # Make sure the index is a non-negative integer
+    try:
+        i = int(i)
+        assert(i >= 0)
+    except:
+        raise SyntaxError(
+                f"{i}: invalid index for any segment, "
+                f"must be a non-negative integer")
+    # Make sure the index is not too big
+    if i >= segment_max[segment]:
+        raise ValueError(
+                f"{i}: outside of range for segment {segment}")
+    # Return the compiled code
+    return VM[move][segment](i)
+
+
+def compile_double_line(line):
+    return ""
+
+###############################################################################
+# COMPILATION FUNCTIONS
 ###############################################################################
 
 def clean_line(line):
@@ -1054,93 +1348,46 @@ def clean_line(line):
     # Remove extra spaces
     return ' '.join(line.split())
 
-###############################################################################
-# Compile Functions
-###############################################################################
-
-def compile_line(line):
-    # Split all spaces
-    split = line.split()
-
-    if len(split) == 1:
-        return compile_operation(split[0])
-    if len(split) == 2:
-        return compile_operation(split[0], split[1])
-    if len(split) == 3:
-        return compile_segment(split[0], split[1], split[2])
-
-    raise SyntaxError(f"{line}: wrong number of words for a VM command, max 3 words allowed."
-                      f"\n   An operation line   must contain a single keyword."
-                      f"\n   A segment   command must contain 2 keywords and a number."
-                      f"\n   A branching command must contain 1 keyword  and a label."
-                      f"\n   Function call and definition must contain 1 keyword, 1 name and 1 number."
-                      f"\n   A return command contains only 'return'."
-                      )
-
-
-def compile_operation(operation):
-
-    try:
-        operation = VM[operation]
-    except:
-        print("Valid commands:", VM.keys())
-        raise SyntaxError(f"{move}: invalid command, must be one of the above")
-
-    if isinstance(operation, str):
-        return operation
-    else:
-        ASM['comparisons_index'] += 1
-        return operation(ASM['comparisons_index'])
-
-
-def compile_segment(move, segment, i):
-
-    try:
-        move = VM[move]
-    except:
-        print("Valid commands:", VM.keys())
-        raise SyntaxError(f"{move}: invalid command, must be one of the above")
-
-    try:
-        move_segment = move[segment]
-    except:
-        print("Valid operations:", move.keys())
-        raise SyntaxError(f"{segment}: invalid segment, must be one of the above")
-
-    try:
-        i = int(i)
-    except:
-        raise SyntaxError(f"{i}: invalid segment index, must be an integer")
-
-    if i >= segment_max[segment]:
-        raise ValueError(f"{i}: outside of range for segment {segment}")
-
-    return move_segment(i)
-
-
-
-###############################################################################
-# COMPILATION FUNCTIONS
-###############################################################################
-
 def compile_vm_to_asm(vm_filename, asm_filename, debug=False):
     if debug: print(f"Compiling file {vm_filename} into {asm_filename}")
+    # Compile
     with open( vm_filename, 'r') as virtual_machine, \
          open(asm_filename, 'w') as assembly:
         # Loop over lines
         for (line_number, line) in enumerate(virtual_machine, 1):
             # Remove comments
             line = clean_line(line)
-            if debug: print(f"Compiling line {line_number}: '{line}'")
             # Ignore empty lines
-            if line == '':
-                continue
+            if line == '': continue
+            # Try to compile
             try:
+                if debug: print(f"Compiling line {line_number}: '{line}'")
                 assembly.write(compile_line(line))
             except Exception as e:
                 raise Exception(
                     f"Compilation failed in line {line_number}"
                     ) from e
+
+    # Final Warnings
+
+    # Warn of undefined functions, unused arguments and argument overflow
+    for function in ASM['calls']:
+        if function not in ASM['functions']:
+            # if ASM['functions'][function] fails then it was not defined
+            import warnings
+            warnings.warn(
+                    f"function {function} was called but not defined",
+                    SyntaxWarning)
+
+    # Warn of used but undefined labels
+    for jump in ASM['jumps']:
+        try:
+            ASM['labels'][jump]
+        except:
+            import warnings
+            warnings.warn(
+                    f"label {jump} was used but not defined",
+                    SyntaxWarning)
 
 
 
@@ -1151,6 +1398,6 @@ def compile_vm_to_asm(vm_filename, asm_filename, debug=False):
 
 
 # Compile Hack virtual machine code to Hack assembly language
-#compile_vm_to_asm(vm_filename, asm_filename, debug=True)
+compile_vm_to_asm(vm_filename, asm_filename, debug=True)
 
 
