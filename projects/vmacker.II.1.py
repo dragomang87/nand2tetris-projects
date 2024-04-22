@@ -337,12 +337,12 @@ VM['not'] = (
 #   lt : x < y
 
 comparisons = {
-        "eq": "EQ",
-        "ne": "NE",
-        "lt": "LT",
-        "le": "LE",
-        "gt": "GT",
-        "ge": "GE",
+        'eq': "EQ",
+        'ne': "NE",
+        'lt': "LT",
+        'le': "LE",
+        'gt': "GT",
+        'ge': "GE",
         }
 
 ASM['comparisons_index'] = 0
@@ -381,26 +381,9 @@ for comparison in comparisons:
 #IMPLEMENTATION - ARRAY SEGMENTS
 ###############################################################################
 
-segment_max = {
-        # 0:256 = 0:2**8 are standard registers and static
-        # 2**14:2**15 is the screen buffer
-        # the stack and the segments can overlap
-        'local'   : 2**14 - 2**8,
-        'argument': 2**14 - 2**8,
-        'this'    : 2**14 - 2**8,
-        'that'    : 2**14 - 2**8,
-        # Non array segments have different maxima
-        'temp'    : 8,              # 5:12
-        'constant': 2**15,          # any value of A instructions, 2**15:2**16 are C instruction
-        'pointer' : 2,
-        'static'  : 2**8 - 2**4,    # range 16:256 = 2**4:2**8
-        }
-
-# segment[i] = RAM[SEGMENT + i]
-
 # Segments:
-#   local   : LCL = 1
-#   argument: ARG = 2
+#   local   : LCL  = 1
+#   argument: ARG  = 2
 #   this    : THIS = 3
 #   that    : THAT = 4
 #   temp    : 5 (fixed size to 8 values)
@@ -419,6 +402,23 @@ location = {
         'address' : 'R15 ',
         'return'  : 'R14 ',
         }
+
+segment_max = {
+        # 0:256 = 0:2**8 are standard registers and static
+        # 2**14:2**15 is the screen buffer
+        # the stack and the segments can overlap
+        'local'   : 2**14 - 2**8,
+        'argument': 2**14 - 2**8,
+        'this'    : 2**14 - 2**8,
+        'that'    : 2**14 - 2**8,
+        # Non array segments have different maxima
+        'temp'    : 8,              # 5:12
+        'constant': 2**15,          # any value of A instructions, 2**15:2**16 are C instruction
+        'pointer' : 2,
+        'static'  : 2**8 - 2**4,    # range 16:256 = 2**4:2**8
+        }
+
+# segment[i] = RAM[SEGMENT + i]
 
 VM['push'] = {}
 VM['pop' ] = {}
