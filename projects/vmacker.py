@@ -29,8 +29,10 @@ MEMORY SEGMENTS (Module II.1.3)
 
 Move:
     pop  segment i: pop from the stack into segment[i]
+                    the value from the stack is abandoned/erased
                     Exception: "pop  const i" not allowed
     push segment i: push the value of segment[i] into the stack
+                    the value is maintained in segment[i]
 
 Segments:
     predefined ARRAYS with variable location
@@ -131,7 +133,8 @@ compiler safety features
 
 # C(OMPUTATION) INSTRUCTIONS
 #   destination = computation; jump
-# destination: any combination of A, D and M = RAM[A]
+# destination:
+#   any combination of A, M and D ... IN THAT ORDER!
 # jump:
 #   jump: JLT JGT JLE JGE JEQ JNE JMP or empty
 # computation:
@@ -183,49 +186,24 @@ default_variables = {
 # IMPLEMENTATION - SETUP AND NOTES
 ###############################################################################
 
-# INPUT FILE
-import sys
+# COMPILE GLOBAL VARIABLES
 
-# Check if input file is given
-if len(sys.argv) == 1:
-    print(
-        f"no input file provided\n"
-        f"please give a text input file "
-        f"(it will be treated as Hack assembly text file)",
-        file=sys.stderr
-        )
-    sys.exit(1)
+# Choose how to clean labels from slashes
+# (cannot have labels with slashes in assembly code
+#  they get interpreted as the start of a comment)
+clean_label = lambda name: name.replace('/','_')
 
-# Save input filename
-vm_filename = sys.argv[1]
+# Choose a separator for building labels
+separator = "\\"
 
+# Filename label
+# the filename is used as global variable for label names
+filename_label = ""
 
-
-# OUTPUT FILE
-
-# Generate output file with .hack extension
-if vm_filename[-3:] != ".vm":
-    asm_filename = f"{vm_filename}.asm"
-    import warnings
-    warnings.warn(
-        f"Extension of input file {vm_filename} is not '.vm', "
-        f"it will still be treated as Hack assembly text file"
-        )
-else:
-    asm_filename = f"{vm_filename[:-3]}.asm"
-
-
-
-# COMPILE VARIABLES
-
-# The filename is used for label names
-# Clean vm_filename from slashes that interefere with asm code
-clean_filename = vm_filename.replace('/','_')
-
-# We use dictionaries to produce code and use them as functions
+# We use dictionaries to produce code generators and functions
 # We split the dictionaries in
-#   the VM  dictionary: contains mapping of actual VM code
-#   the ASM dictionary: contains mapping of helper code
+#   the VM  dictionary: contains compilers of actual VM code
+#   the ASM dictionary: contains compilers of helper code and helper variables
 
 ASM = {}
 VM = {}
@@ -235,9 +213,9 @@ VM = {}
 # instance of the ASM code, call, etc
 # So we keep track of how many of these labels are produced
 # to give them a unique value using an instance index
+instance_label = lambda: f"instance_label_{ASM['instance_label_index']}"
+# ASM['instance_label_index'] is reset at compile time
 
-ASM['instance_label_index'] = 0
-instance_label = lambda: "instance_label_{ASM['instance_label_index']}"
 
 
 # COMPILE NOTES
@@ -269,48 +247,50 @@ instance_label = lambda: "instance_label_{ASM['instance_label_index']}"
 ASM['push stack'] = (
         f"\n// ASM['push stack'] (from D)"
         f"\n@SP"
-        f"\nA M = M + 1"
+        f"\nAM  = M + 1"
         f"\nA   = A - 1"
-        f"\n  M = D"
-        f"\n D  = 0             // optional safety feature"
+        f"\n M  = D"
+        f"\n  D = 0             // optional safety feature"
         ) # 4+1 lines
 
 ASM['push value'] = lambda i: (
         f"\n// ASM['push value']({i})"
         f"\n@{i}"
-        f"\n D  = A"
+        f"\n  D = A"
         + ASM['push stack']
         ) # 6+1 lines
 
 ASM['push ram'] = lambda i: (
         f"\n// ASM['push ram']({i})"
         f"\n@{i}"
-        f"\n D  = M"
+        f"\n  D = M"
+        # the value is not supposed to be erased
+        #f"\n M  = 0             // optional safety feature"
         + ASM['push stack']
         ) # 6+1 lines
 
 ASM['pop stack'] = (
         f"\n// ASM['pop stack'] (to D)"
         f"\n@SP"
-        f"\nA M = M - 1"
-        f"\n D  = M"
-        f"\n  M = 0             // optional safety feature"
+        f"\nAM  = M - 1"
+        f"\n  D = M"
+        f"\n M  = 0             // optional safety feature"
         ) # 3+1 lines
 
 ASM['pop sum'  ] = (
         f"\n// ASM['pop sum'] (to D)"
         f"\n@SP"
-        f"\nA M = M - 1"
-        f"\n D  = D + M"
-        f"\n  M = 0             // optional safety feature"
+        f"\nAM  = M - 1"
+        f"\n  D = D + M"
+        f"\n M  = 0             // optional safety feature"
         ) # 3+1 lines
 
 ASM['pop sub'  ] = (
         f"\n// ASM['pop sub'] (to D)"
         f"\n@SP"
-        f"\nA M = M - 1"
-        f"\n D  = D - M"
-        f"\n  M = 0             // optional safety feature"
+        f"\nAM  = M - 1"
+        f"\n  D = D - M"
+        f"\n M  = 0             // optional safety feature"
         ) # 3+1 lines
 
 ASM['move stack' ] = (
@@ -332,24 +312,24 @@ ASM['move stack' ] = (
         #     M = value = D - A
         f"\n// A = stack, M = value"
         f"\n@SP"
-        f"\nA M = M - 1"
+        f"\nAM  = M - 1"
         f"\n// D = destination + value"
-        f"\n D  = D + M"
+        f"\n  D = D + M"
         f"\n// A = destination, M = ?"
         f"\nA   = D - M"
         f"\n// A = destination, M = value"
-        f"\n  M = D - A"
-        f"\n D  = 0         // optional safety feature"
-        f"\n@SP             // optional safety feature"
-        f"\nA   = M         // optional safety feature"
-        f"\n  M = 0         // optional safety feature"
+        f"\n M  = D - A"
+        f"\n  D = 0             // optional safety feature"
+        f"\n@SP                 // optional safety feature"
+        f"\nA   = M             // optional safety feature"
+        f"\n M  = 0             // optional safety feature"
         ) # 5+4 lines total
 
 ASM['delete stack'] = (
         f"\n// ASM['delete stack']"
         f"\n@SP                 // optional safety feature"
-        f"\nA M = M - 1         // optional safety feature"
-        f"\n  M = 0             // optional safety feature"
+        f"\nAM  = M - 1         // optional safety feature"
+        f"\n M  = 0             // optional safety feature"
         )
 
 # Safety feature: discard stack by setting it to zero
@@ -367,53 +347,18 @@ ASM['delete stack to D'] = lambda instance_label: (
         f"\n// (clear to zero until address D included)"
         f"\n// START optional safety feature"
         f"\n@SP                 // go to stack pointer"
-        f"\n  M = M + 1         // add one entry to SP, one is always deleted"
-        f"\n D  = M - D         // turn D into a counter of entries to clear"
-        f"\n(asm_delete_stack_label.{clean_filename}.{instance_label})  // loop start"
+        f"\n M  = M + 1         // add one entry to SP, one is always deleted"
+        f"\n  D = M - D         // turn D into a counter of entries to clear"
+        f"\n(asm_delete_stack_label{separator}{filename_label}{separator}{instance_label})  // loop start"
         + ASM['delete stack'] + # 3 lines
-        f"\n D  = D - 1         // decrement counter"
-        f"\n@asm_delete_stack_label.{clean_filename}.{instance_label}      // point to clearing"
+        f"\n  D = D - 1         // decrement counter"
+        f"\n@asm_delete_stack_label{separator}{filename_label}{separator}{instance_label}      // point to clearing"
         f"\nD; JGT              // loop jump if counter >= 1"
         f"\n// END   optional safety feature"
         f"\n//@SP               // Alternative unsafe code"
         f"\n//  M = D + 1       // Alternative unsafe code"
         ) # 12 lines # 2 lines unsafe
 
-# Implementation with zero of SP instead of SP--
-# Downside: it has one more instruction in the loop
-# Logic:
-#   - use "while loop" style instead of "for loop" style
-#   - while loop runs at least once, but has simpler assembly
-#   - to avoid loosing data if there is nothing to do
-#       - clear the current SP address
-#         this might/will be zero on first entry
-#         and is not part of the stack
-#       - decrease the stack
-#       - on exit do SP++
-#   - if D >= SP then nothing happens
-'''
-ASM['delete stack to D'] = lambda instance_label: (
-        f"\n// ASM['clear stack'] (until address D)"
-        f"\n// (clear to zero until address D included)"
-        f"\n// START optional safety feature"
-        f"\n@SP                 // go to stack pointer"
-        f"\n D  = M - D         // find how many entries need clearing"
-        f"\n(asm_clear_stack_label.{clean_filename}.{instance_label})     // enter clearing one value"
-        f"\n// SP -= 1, go back to SP+1, then delete"
-        f"\n@SP                 // ⎫ clear current stack (might be zero already) and move up"
-        f"\nA M = M - 1         // ⎟ and reduce the count of cleared entries,"
-        f"\nA   = A + 1         // ⎬ repetitive for the first entry,"
-        f"\n  M = 0             // ⎟ but needed because the code"
-        f"\n D  = D - 1         // ⎭ is always executed at least once (easier implementation)"
-        f"\n@asm_clear_stack_label.{clean_filename}.{instance_label}      // point to clearing"
-        f"\nD; JGE              //   jump to clearing if there is more to clear"
-        #f"\n@SP                 //   go to stack pointer"
-        #f"\n  M = M + 1         //   move stack back up"
-        f"\n// END   optional safety feature"
-        f"\n//@SP               // Alternative unsafe code"
-        f"\n//  M = D + 1       // Alternative unsafe code"
-        ) # 12 lines # 2 lines unsafe
-'''
 
 ###############################################################################
 # IMPLEMENTATION - OPERATIONS
@@ -449,21 +394,21 @@ VM['add'] = (
         f"\n// VM add"
         + ASM['pop stack'] +
         f"\nA   = A - 1"
-        f"\n  M = M + D"
-        f"\n D  = 0             // optional safety feature"
+        f"\n M  = M + D"
+        f"\n  D = 0             // optional safety feature"
         )
 VM['sub'] = (
         f"\n// VM sub"
         + ASM['pop stack'] +
         f"\nA   = A - 1"
-        f"\n  M = M - D"
-        f"\n D  = 0             // optional safety feature"
+        f"\n M  = M - D"
+        f"\n  D = 0             // optional safety feature"
         )
 VM['neg'] = (
         f"\n// VM neg"
         f"\n@SP"
         f"\nA   = M - 1"
-        f"\n  M = -M"
+        f"\n M  = -M"
         )
 
 # BOOLEANS
@@ -474,21 +419,21 @@ VM['and'] = (
         f"\n// VM and"
         + ASM['pop stack'] +
         f"\nA   = A - 1"
-        f"\n  M = M & D"
-        f"\n D  = 0             // optional safety feature"
+        f"\n M  = M & D"
+        f"\n  D = 0             // optional safety feature"
         )
 VM['or'] = (
         f"\n// VM or"
         + ASM['pop stack'] +
         f"\nA   = A - 1"
-        f"\n  M = M | D"
-        f"\n D  = 0             // optional safety feature"
+        f"\n M  = M | D"
+        f"\n  D = 0             // optional safety feature"
         )
 VM['not'] = (
         f"\n// VM not"
         f"\n@SP"
         f"\nA   = M - 1"
-        f"\n  M = !M"
+        f"\n M  = !M"
         )
 
 
@@ -517,19 +462,19 @@ for comparison in comparisons:
         + ASM['pop stack'] +
         f"\nA   = A - 1"
         # Compute the difference
-        f"\n D  = M - D"
+        f"\n  D = M - D"
         # Default x to the comparison being true
-        f"\n  M = -1"
+        f"\n M  = -1"
         # Point to skipping the comparison being false
-        f"\n@compare_label.{clean_filename}.{comparison}.{instance_label}"
+        f"\n@compare_label_{comparison}{separator}{filename_label}{separator}{instance_label}"
         # If the comparison is true skip setting it to false
         f"\nD; J{comparisons[comparison]}"
         # If the comparison was false and no skip happened, set it to false
         f"\n@SP"
         f"\nA   = M - 1"
-        f"\n  M = 0"
+        f"\n M  = 0"
         # Create the label to jump to if condition is true
-        f"\n(compare_label.{clean_filename}.{comparison}.{instance_label})"
+        f"\n(compare_label_{comparison}{separator}{filename_label}{separator}{instance_label})"
         ) # 11+2 lines (one label)
 
 
@@ -588,22 +533,22 @@ for segment in ['local', 'argument', 'this', 'that', 'temp']:
             f"\n// ASM['address']['{segment}']({i})"
             f"\n// A = {segment} + {i} = source"
             f"\n@{location[segment]}"
-            f"\n D  = " + ("A" if segment=="temp" else "M") +
+            f"\n  D = " + ("A" if segment=="temp" else "M") +
             f"\n@{i}"
             f"\nA   = D + A"
-            f"\n D  = M"
-            f"\n M  = 0         // optional safety feature"
+            f"\n  D = M"
             ) # 5+1 lines
 
+    # Implementation:
+    #   - the value is not supposed to be removed from the segment on push
     VM['push'][segment] = lambda i, segment=segment: (
             f"\n// VM push {segment} {i}"
             f"\n// A = {segment} + {i} = source"
             f"\n@{location[segment]}"
-            f"\n D  = " + ("A" if segment=="temp" else "M") +
+            f"\n  D = " + ("A" if segment=="temp" else "M") +
             f"\n@{i}"
             f"\nA   = D + A"
-            f"\n D  = M"
-            f"\n M  = 0         // optional safety feature"
+            f"\n  D = M"
             + ASM['push stack'] # 4+1 lines
             ) # 9+2 lines
 
@@ -611,9 +556,9 @@ for segment in ['local', 'argument', 'this', 'that', 'temp']:
             f"\n// VM pop {segment} {i}"
             f"\n// D = {segment} + {i} = destination"
             f"\n@{location[segment]}"
-            f"\n D  = " + ("A" if segment=="temp" else "M") +
+            f"\n  D = " + ("A" if segment=="temp" else "M") +
             f"\n@{i}"
-            f"\n D  = D + A"
+            f"\n  D = D + A"
             + ASM['move stack'] # 5+4 lines
             ) # 9+4 lines total
 
@@ -635,26 +580,26 @@ ASM['move'] = lambda from_segment, i, to_segment, j: (
         f"\n// ASM['move']({from_segment}, {i}, {to_segment}, {j})"
         f"\n// R15 = D = destination"   # 6 lines
         f"\n@{location[to_segment]}"
-        f"\n D  = M"
+        f"\n  D = M"
         f"\n@{i}"
-        f"\n D  = D + A"
+        f"\n  D = D + A"
         f"\n@R15"
-        f"\n  M = D"
+        f"\n M  = D"
         f"\n// D = source value"   # 5+1 lines
         f"\n@{location[from_segment]}"
-        f"\n D  = M"
+        f"\n  D = M"
         f"\n@{i}"
         f"\nA   = D + A"
-        f"\n D  = M"
-        f"\n  M = 0         // optional safety feature"
+        f"\n  D = M"
+        f"\n M  = 0         // optional safety feature"
         f"\n// destination = source value"   # 3+4 lines
         f"\n@R15"
         f"\nA   = M"
-        f"\n  M = D"
-        f"\n D  = 0         // optional safety feature"
+        f"\n M  = D"
+        f"\n  D = 0         // optional safety feature"
         f"\n@R15            // optional safety feature"
         f"\nA   = M         // optional safety feature"
-        f"\n  M = 0         // optional safety feature"
+        f"\n M  = 0         // optional safety feature"
         ) # 14+5 lines total instead of 18+5
 
 '''
@@ -670,29 +615,29 @@ ASM['move'] = lambda from_segment, i, to_segment, j: (
         f"\n// ASM['move']({from_segment}, {i}, {to_segment}, {j})"
         f"\n// D = value from source"   # 6 lines
         f"\n@{i}"
-        f"\n D  = A"
+        f"\n  D = A"
         f"\n@{location[from_segment]}"
-        f"\n  M = M + D"
+        f"\n M  = M + D"
         f"\nA   = M"
-        f"\n D  = M"
+        f"\n  D = M"
         f"\n// D = value + destination" # 3 lines
         f"\n@{location[to_segment]}"
-        f"\n D  = D + M"
+        f"\n  D = D + M"
         f"\n@{i}"
-        f"\n D  = D + A"
+        f"\n  D = D + A"
         f"\n// A = source, M = value, D = destination + value" # 2 lines
         f"\n@{location[from_segment]}"
         f"\nA   = M"
         f"\n// A = destination, M = value" # 2 lines
         f"\nA   = D - M"
-        f"\n  M = D - A"
+        f"\n M  = D - A"
         f"\n// restore source segment" # 4 lines
         f"\n@{i}"
-        f"\n D  = A"
+        f"\n  D = A"
         f"\n@{location[from_segment]}"
-        f"\n  M = 0         // optional safety feature"
-        f"\n  M = M - D"
-        f"\n D  = 0         // optional safety feature"
+        f"\n M  = 0         // optional safety feature"
+        f"\n M  = M - D"
+        f"\n  D = 0         // optional safety feature"
         ) # 17+2 lines total instead of 18+5
 
 # Implementation 4:
@@ -712,18 +657,18 @@ ASM['move'] = lambda from_segment, i, to_segment, j: (
         f"\n// ASM['move']({from_segment}, {i}, {to_segment}, {j})"
         f"\n// SP -> value"   # 8 lines
         f"\n@{location[from_segment]}"
-        f"\n D  = M"
+        f"\n  D = M"
         f"\n@{i}"
         f"\nA   = D + A"
-        f"\n D  = M"
+        f"\n  D = M"
         f"\n@SP"
         f"\nA   = M"
-        f"\n  M = D"
+        f"\n M  = D"
         f"\n// D = destination" # 4 lines
         f"\n@{location[to_segment]}"
-        f"\n D  = M"
+        f"\n  D = M"
         f"\n@{i}"
-        f"\n D  = D + A"
+        f"\n  D = D + A"
         # Accumulate destination and value in D
         #     A = source (stack), M == value"
         #     D = destination + value, M == value"
@@ -732,16 +677,16 @@ ASM['move'] = lambda from_segment, i, to_segment, j: (
         f"\n// A = source, M = value, D = destination + value" # 3 lines
         f"\n@SP"
         f"\nA   = M"
-        f"\n D  = D + M"
+        f"\n  D = D + M"
         f"\n// A = destination, M = value" # 2 lines
         f"\nA   = D - M"
-        f"\n  M = D - A"
+        f"\n M  = D - A"
         f"\n@{location[from_segment]}           // optional safety feature"
-        f"\n D  = M         // optional safety feature"
+        f"\n  D = M         // optional safety feature"
         f"\n@{i}            // optional safety feature"
         f"\nA   = D + A     // optional safety feature"
-        f"\n D  = 0         // optional safety feature"
-        f"\n  M = 0         // optional safety feature"
+        f"\n  D = 0         // optional safety feature"
+        f"\n M  = 0         // optional safety feature"
         ) # 14+6 lines total instead of 18+5
 
 
@@ -762,15 +707,15 @@ ASM['move'] = lambda from_segment, i, to_segment, j: (
         f"\n// ASM['move']({from_segment}, {i}, {to_segment}, {j})"
         f"\n// D = value from source"   # 5 lines
         f"\n@{location[from_segment]}"
-        f"\n D  = M"
+        f"\n  D = M"
         f"\n@{i}"
         f"\nA   = D + A"
-        f"\n D  = M"
+        f"\n  D = M"
         f"\n// D = value + destination" # 3 lines
         f"\n@{location[to_segment]}"
-        f"\n D  = D + M"
+        f"\n  D = D + M"
         f"\n@{i}"
-        f"\n D  = D + A"
+        f"\n  D = D + A"
         # Accumulate destination and value in D
         #     A = source (stack), M == value"
         #     D = destination + value, M == value"
@@ -778,18 +723,18 @@ ASM['move'] = lambda from_segment, i, to_segment, j: (
         #     M = value = D - A"
         f"\n// A = source, M = value, D = destination + value" # 4 lines
         f"\n@{location[from_segment]}"
-        f"\n D  = M"
+        f"\n  D = M"
         f"\n@{i}"
         f"\nA   = D + A"
         f"\n// A = destination, M = value" # 2 lines
         f"\nA   = D - M"
-        f"\n  M = D - A"
+        f"\n M  = D - A"
         f"\n@{location[from_segment]}           // optional safety feature"
-        f"\n D  = M         // optional safety feature"
+        f"\n  D = M         // optional safety feature"
         f"\n@{i}            // optional safety feature"
         f"\nA   = D + A     // optional safety feature"
-        f"\n D  = 0         // optional safety feature"
-        f"\n  M = 0         // optional safety feature"
+        f"\n  D = 0         // optional safety feature"
+        f"\n M  = 0         // optional safety feature"
         ) # 14+6 lines total instead of 18+5
 
 '''
@@ -820,8 +765,8 @@ VM['pop' ]['pointer'] = lambda i: (
         f"\n// VM pop pointer {i}"
         + ASM['pop stack'] +    # 3+1 lines
         f"\n@{pointer[i]}"
-        f"\n  M = D"
-        f"\n D  = 0             // optional safety feature"
+        f"\n M  = D"
+        f"\n  D = 0             // optional safety feature"
         ) # 5+2 lines
 
 VM['push']['pointer'] = lambda i: (
@@ -832,20 +777,19 @@ VM['push']['pointer'] = lambda i: (
 
 # STATIC
 
-# Set the name of the ASM variable for static for this file
-static = f"static.{clean_filename}"
+# Implementation: static variables are file dependent
 
 VM['push']['static'] = lambda i: (
-        f"\n// VM push static ({static}) {i}"
-        + ASM['push ram']("{static}.{i}")
+        f"\n// VM push static {i}"
+        + ASM['push ram'](f"static{separator}{filename_label}{separator}{i}")
         )
 
 VM['pop']['static'] = lambda i : (
-        f"\n// VM pop  static ({static}) {i}"
+        f"\n// VM pop  static {i}"
         + ASM['pop stack'] +        # 3+1 lines
-        f"\n@{static}.{i}"
-        f"\n  M = D"
-        f"\n D  = 0             // optional safety feature"
+        f"\n@static{separator}{filename_label}{separator}{i}"
+        f"\n M  = D"
+        f"\n  D = 0             // optional safety feature"
         ) # 5+2 lines
 
 
@@ -861,29 +805,25 @@ VM['push']['constant'] = lambda i: (
 # IMPLEMENTATION - BRANCHING
 ###############################################################################
 
-# Dictionary to store VM labels to make sure they are not defined twice
-# 'label <name>' should not appear twice with the same name in VM code
-vm_labels = {}
-
 #!!! Are VM labels file independent??? TODO
 
-VM['label'] = lambda label: (
-        f"\n// VM label {label}"
-        f"\n(vm_label.{clean_filename}.{label})"
+VM['label'] = lambda vm_label: (
+        f"\n// VM label {vm_label}"
+        f"\n(vm_label{separator}{filename_label}{separator}{clean_label(vm_label)})"
         ) # 1 ASM line, 0 HACK lines
 
 
-VM['goto' ] = lambda label: (
-        f"\n// VM goto {label}"
-        f"\n@vm_label.{clean_filename}.{label}"
-        f"\nJMP"
+VM['goto' ] = lambda vm_label: (
+        f"\n// VM goto {vm_label}"
+        f"\n@vm_label{separator}{filename_label}{separator}{clean_label(vm_label)}"
+        f"\n0; JMP" # a jump needs an expression sometimes apparently
         ) # 2 lines
 
-VM['if-goto'] = lambda label: (
-        f"\n// VM goto {label}"
+VM['if-goto'] = lambda vm_label: (
+        f"\n// VM if-goto {vm_label}"
         + ASM['pop stack'] +    # 3+1 lines
-        f"\n@vm_label.{clean_filename}.{label}"
-        f"\nD; JMP"
+        f"\n@vm_label{separator}{filename_label}{separator}{clean_label(vm_label)}"
+        f"\nD; JNE"
         ) # 5+2 lines
 
 
@@ -898,20 +838,20 @@ ASM['if'] = {}
 ASM['if push'] = {}
 for comparison in comparisons:
     ASM['if'][comparison] = {}
-    ASM['if'][comparison]["stack"] = lambda label, comparison=comparison: (
+    ASM['if'][comparison]["stack"] = lambda vm_label, comparison=comparison: (
             f"\n// ASM['if']['{comparison}']"
             f"\n// point stack to x and put it in D"
             f"\n@SP"
-            f"\n  M = M - 1"
-            f"\nA M = M - 1"
-            f"\n D  = M" # x
+            f"\n M  = M - 1"
+            f"\nAM  = M - 1"
+            f"\n  D = M" # x
             f"\n M  = 0         // optional safety feature"
             f"\n// point stack to y and compute the difference"
             f"\nA   = A + 1"
-            f"\n D  = D - M" # x - y
+            f"\n  D = D - M" # x - y
             f"\n M  = 0         // optional safety feature"
             # Prepare jump label
-            f"\n@vm_label.{clean_filename}.{label}"
+            f"\n@vm_label{separator}{filename_label}{separator}{clean_label(vm_label)}"
             # Conditional jump
             f"\nD; J{comparisons[comparison]}"
             ) # 8+2 lines instead of 16+3
@@ -923,56 +863,56 @@ for segment in ['local', 'argument', 'this', 'that', 'temp']:
     ASM['if']['static'  ] = {}
     ASM['if']['constant'] = {}
     for comparison in comparisons:
-        ASM['if'][segment][comparison] = lambda label, i, segment=segment, comparison=comparison: (
+        ASM['if'][segment][comparison] = lambda vm_label, i, segment=segment, comparison=comparison: (
                 f"\n// A = {segment} + {i} = source"
                 f"\n@{location[segment]}"
-                f"\n D  = " + ("A" if segment=="temp" else "M") +
+                f"\n  D = " + ("A" if segment=="temp" else "M") +
                 f"\n@{i}"
                 f"\nA   = D + A"
-                f"\n D  = M"
+                f"\n  D = M"
                 f"\n M  = 0         // optional safety feature"
                 f"\n@SP"
-                f"\nA M = M - 1"
-                f"\n D  = M - D"
+                f"\nAM  = M - 1"
+                f"\n  D = M - D"
                 f"\n M  = 0         // optional safety feature"
                 # Prepare jump label
-                f"\n@vm_label.{clean_filename}.{label}"
+                f"\n@vm_label{separator}{filename_label}{separator}{clean_label(vm_label)}"
                 # Conditional jump
                 f"\nD; J{comparisons[comparison]}"
                 ) # 10+2 lines instead of 25+5
-    ASM['if']['pointer' ][comparison] = lambda label, i, segment=segment, comparison=comparison: (
+    ASM['if']['pointer' ][comparison] = lambda vm_label, i, segment=segment, comparison=comparison: (
             f"\n@{pointer[i]}"
-            f"\n D  = M"
+            f"\n  D = M"
             f"\n@SP"
-            f"\nA M = M - 1"
-            f"\n D  = M - D"
+            f"\nAM  = M - 1"
+            f"\n  D = M - D"
             f"\n M  = 0         // optional safety feature"
             # Prepare jump label
-            f"\n@vm_label.{clean_filename}.{label}"
+            f"\n@vm_label{separator}{filename_label}{separator}{clean_label(vm_label)}"
             # Conditional jump
             f"\nD; J{comparisons[comparison]}"
             ) # 7+2 lines
-    ASM['if']['static'  ][comparison] = lambda label, i, segment=segment, comparison=comparison: (
-            f"\n@{static}.{i}"
-            f"\n D  = M"
+    ASM['if']['static'  ][comparison] = lambda vm_label, i, segment=segment, comparison=comparison: (
+            f"\n@static{separator}{filename_label}{separator}{i}"
+            f"\n  D = M"
             f"\n@SP"
-            f"\nA M = M - 1"
-            f"\n D  = M - D"
+            f"\nAM  = M - 1"
+            f"\n  D = M - D"
             f"\n M  = 0         // optional safety feature"
             # Prepare jump label
-            f"\n@vm_label.{clean_filename}.{label}"
+            f"\n@vm_label{separator}{filename_label}{separator}{clean_label(vm_label)}"
             # Conditional jump
             f"\nD; J{comparisons[comparison]}"
             ) # 7+2 lines
-    ASM['if']['constant'][comparison] = lambda label, i, segment=segment, comparison=comparison: (
+    ASM['if']['constant'][comparison] = lambda vm_label, i, segment=segment, comparison=comparison: (
             f"\n@{i}"
-            f"\n D  = A"
+            f"\n  D = A"
             f"\n@SP"
-            f"\nA M = M - 1"
-            f"\n D  = M - D"
+            f"\nAM  = M - 1"
+            f"\n  D = M - D"
             f"\n M  = 0         // optional safety feature"
             # Prepare jump label
-            f"\n@vm_label.{clean_filename}.{label}"
+            f"\n@vm_label{separator}{filename_label}{separator}{clean_label(vm_label)}"
             # Conditional jump
             f"\nD; J{comparisons[comparison]}"
             ) # 7+2 lines
@@ -985,97 +925,93 @@ for segment in ['local', 'argument', 'this', 'that', 'temp']:
 # IMPLEMENTATION - BRANCHING
 ###############################################################################
 
+# Implementation: function names are file dependent (II.7)
 
-function_label = lambda name: f"{clean_filename}." + name.replace('/','_')
-
-VM['call'] = lambda name, n_arguments, instance_label: (
-        f"\n// VM call {name} {n_arguments}"
+VM['call'] = lambda function_name, n_arguments, instance_label: (
+        f"\n// VM call {function_name} {n_arguments}"
         # Make sure the number of arguments is at least 1
         # (convention says that the return value is in ARG[0])
         + (
         f"\n@SP"
-        f"\n  M = M + 1" if n_arguments == 0 else "")
-        + ASM['push value'](f"return_label.{function_label(name)}.{instance_label}")
+        f"\n M  = M + 1" if n_arguments == 0 else "")
+        + ASM['push value'](f"return_label{separator}{filename_label}{separator}{clean_label(function_name)}{separator}{instance_label}")
         + ASM['push ram']("LCL" )
         + ASM['push ram']("ARG" )
         + ASM['push ram']("THIS")
         + ASM['push ram']("THAT") +
         # A == SP
         f"\n// function LCL = SP"
-        f"\n D  = M"
+        f"\n  D = M"
         f"\n@LCL"
-        f"\n  M = D"
+        f"\n M  = D"
         f"\n// function ARG = SP - n_frame - n_arguments = SP - 5 - {n_arguments}"
         f"\n@5"
-        f"\n D  = D - A"
+        f"\n  D = D - A"
         # Now the number of arguments is at least 1
         f"\n@{min(n_arguments,1)}"
-        f"\n D  = D - A"
+        f"\n  D = D - A"
         f"\n@ARG"
-        f"\n  M = D"
-        f"\n D  = 0             // optional safety feature"
-        f"\n@function_label.{function_label(name)}"
-        f"\nJMP"
-        f"\n(return_label.{function_label(name)}.{instance_label})"
+        f"\n M  = D"
+        f"\n  D = 0             // optional safety feature"
+        f"\n@function_label{separator}{filename_label}{separator}{clean_label(function_name)}"
+        f"\n0; JMP" # a jump needs an expression sometimes apparently
+        f"\n(return_label{separator}{filename_label}{separator}{clean_label(function_name)}{separator}{instance_label})"
         )
 
 
-def vm_function(name, n_locals):
-    return (
-        f"\n// VM function {name} {n_locals}"
-        f"\n(function_label.{function_label(name)})"
+VM['function'] = lambda function_name, n_locals: (
+        f"\n// VM function {function_name} {n_locals}"
+        f"\n(function_label{separator}{filename_label}{separator}{clean_label(function_name)})"
         f"\n@{n_locals}"
-        f"\n D  = A"
+        f"\n  D = A"
         f"\n@SP"
-        f"\n  M = M + D"
+        f"\n M  = M + D"
         )
 
-VM['function'] = vm_function
 
 
-def vm_return(instance_label):
-    return (
+VM['return'] = lambda instance_label: (
         f"\n// VM return START"
         f"\n// Save the return value to argument[0],"
         f"\n// which is the top of the stack after return"
         + VM['pop']["argument"](0) +   # 9 + 1 lines
         f"\n// Clear the stack until LCL[0]"
         f"\n@LCL"
-        f"\n D  = M"
-        + ASM['delete stack to D'](instance_label + ".local") +     # 12 lines
+        f"\n  D = M"
+        + ASM['delete stack to D'](instance_label + "{separator}local") +     # 12 lines
         # SP points to calleeLCL - 1 -> callerTHAT
         # Make the stack skip the saved frame
         # (we can still return to the saved frame with LCL)
         f"\n// Skip the saved frame and clear until and point to ARG[1]"
         f"\n@5"
-        f"\n D  = A"
+        f"\n  D = A"
         f"\n@SP"
-        f"\n  M = M - D"                # SP -> calleeLCL - 6 = before the caller return address
+        f"\n M  = M - D"                # SP -> calleeLCL - 6 = before the caller return address
         f"\n@ARG"
-        f"\n D  = M + 1"
-        + ASM['delete stack to D'](instance_label + ".argument") +     # 12 lines
+        f"\n  D = M + 1"
+        + ASM['delete stack to D'](instance_label + "{separator}argument") +     # 12 lines
         # LCL still point to after the saved frame
         f"\n// Return to saved frame and recover THAT"
         f"\n@LCL"
-        f"\nA M = M - 1"        # RAM[LCL] = calleeLCL - 1 -> callerTHAT
-        f"\n D  = M"
-        f"\n  M = 0             // optional safety feature"
+        f"\nAM  = M - 1"        # RAM[LCL] = calleeLCL - 1 -> callerTHAT
+        f"\n  D = M"
+        f"\n M  = 0             // optional safety feature"
         f"\n@THAT"
-        f"\n  M = D"
+        f"\n M  = D"
         f"\n// Return to saved frame and recover THIS"
         f"\n@LCL"
-        f"\nA M = M - 1"        # RAM[LCL] = calleeLCL - 2 -> callerTHIS
-        f"\n D  = M"
-        f"\n  M = 0             // optional safety feature"
+        f"\nAM  = M - 1"        # RAM[LCL] = calleeLCL - 2 -> callerTHIS
+        f"\n  D = M"
+        f"\n M  = 0             // optional safety feature"
         f"\n@THIS"
-        f"\n  M = D"
+        f"\n M  = D"
         f"\n// Return to saved frame and recover ARG"
         f"\n@LCL"
-        f"\nA M = M - 1"        # RAM[LCL] = calleeLCL - 3 -> callerARG
-        f"\n D  = M"
-        f"\n  M = 0             // optional safety feature"
+        f"\nAM  = M - 1"        # RAM[LCL] = calleeLCL - 3 -> callerARG
+        f"\n  D = M"
+        f"\n M  = 0             // optional safety feature"
         f"\n@ARG"
-        f"\n  M = D"
+        f"\n M  = D"
         f"\n// Return to saved frame and recover LCL"
         f"\n// keep the sum of both LCL in D to return to frame"
         # Start
@@ -1090,7 +1026,7 @@ def vm_return(instance_label):
         #
         # Option 1: 6 lines
         #   A = LCL
-        #   ADM = M - 1: RAM[LCL] = A = D = a1, M == a2  (A = M mandatory first steps to do anything)
+        #   AMD = M - 1: RAM[LCL] = A = D = a1, M == a2  (A = M mandatory first steps to do anything)
         #   D = M + D = a1 + a2
         #   A = LCL, M == a1
         #   M = RAM[LCL] = D - M = a2, A == LCL
@@ -1099,11 +1035,11 @@ def vm_return(instance_label):
         # Option 2: 9 lines
         #   // Store LCL in R15 and go to it, 4 lines
         #   @LCL
-        #    DM = M - 1
+        #    MD = M - 1
         #   @R15
         #   A M = D
         #   // Recover LCL, 3 lines
-        #    D  = M
+        #     D = M
         #   @LCL
         #     M = D
         #   // Return to frame using R15, 2 lines
@@ -1111,23 +1047,22 @@ def vm_return(instance_label):
         #   A   = M
         #
         f"\n@LCL"
-        f"\nADM = M - 1"        # A = D = calleeLCL - 4 -> M = callerLCL
-        f"\n D  = M + D"        # D = callerLCL + (calleeLCL - 4)
+        f"\nAMD = M - 1"        # A = D = calleeLCL - 4 -> M = callerLCL
+        f"\n  D = M + D"        # D = callerLCL + (calleeLCL - 4)
         f"\n@LCL"               # RAM[LCL] = M = (calleeLCL - 4)
-        f"\n  M = D - M"        # RAM[LCL] = M = callerLCL
+        f"\n M  = D - M"        # RAM[LCL] = M = callerLCL
         f"\n// Return to saved frame and delete callerLCL"
         f"\nA   = D - M"        # A = (calleeLCL - 4) -> callerLCL
-        f"\n  M = 0             // optional safety feature"
+        f"\n M  = 0             // optional safety feature"
         f"\n// Recover caller's return address and jump"
         f"\nA   = A - 1"        # A = (calleeLCL - 5) -> return address
-        f"\n D  = M"            # D = return address
-        f"\n  M = 0             // optional safety feature"
+        f"\n  D = M"            # D = return address
+        f"\n M  = 0             // optional safety feature"
         f"\nA   = D"            # A = return address
-        f"\nJMP"
+        f"\n0; JMP" # a jump needs an expression sometimes apparently
         f"\n// VM return END"
         )
 
-VM['return'] = vm_return
 
 ###############################################################################
 # Compile Functions
@@ -1242,11 +1177,11 @@ def compile_branching(command, label):
     if command == 'label':
         ASM['labels'][label] = True
         # Return the compiled code
-        return VM['label'](label.replace("/", "_"))
+        return VM['label'](label)
     else:
         ASM['jumps' ][label] = True
         # Return the compiled code
-        return VM[command](label.replace("/", "_"))
+        return VM[command](label)
 
 
 ASM['functions'] = {}
@@ -1339,7 +1274,7 @@ def compile_double_line(line):
     return ""
 
 ###############################################################################
-# COMPILATION FUNCTIONS
+# COMPILER FUNCTION
 ###############################################################################
 
 def clean_line(line):
@@ -1349,6 +1284,16 @@ def clean_line(line):
     return ' '.join(line.split())
 
 def compile_vm_to_asm(vm_filename, asm_filename, debug=False):
+    # Set filename label
+    # Cannot have labels with slashes, options:
+    #   - replace slashes
+    #       filename_label = clean_label(vm_filename)
+    #   - remove the folder path
+    import os
+    filename_label = os.path.basename(vm_filename)
+    # Set counter for instance labels
+    ASM['instance_label_index'] = 0
+
     if debug: print(f"Compiling file {vm_filename} into {asm_filename}")
     # Compile
     with open( vm_filename, 'r') as virtual_machine, \
@@ -1361,12 +1306,14 @@ def compile_vm_to_asm(vm_filename, asm_filename, debug=False):
             if line == '': continue
             # Try to compile
             try:
-                if debug: print(f"Compiling line {line_number}: '{line}'")
+                if debug: print(
+                        f"Compiling line {line_number}: '{line}'"
+                        )
                 assembly.write(compile_line(line))
             except Exception as e:
                 raise Exception(
-                    f"Compilation failed in line {line_number}"
-                    ) from e
+                        f"Compiling line {line_number} FAILED: '{line}'"
+                        ) from e
 
     # Final Warnings
 
@@ -1392,12 +1339,35 @@ def compile_vm_to_asm(vm_filename, asm_filename, debug=False):
 
 
 ###############################################################################
-# COMPILE
+# COMPILER SCRIPT
 ###############################################################################
 
+def vm_to_asm_filename(vm_filename):
+    if vm_filename[-3:] != ".vm":
+        import warnings
+        warnings.warn(f"Extension of input file {vm_filename} is not '.vm'")
+        return f"{vm_filename}.asm"
+    else:
+        return f"{vm_filename[:-3]}.asm"
 
+if __name__ == "__main__":
+    # INPUT/OUTPUT FILES
+    import sys
+    # Check if input file is given
+    if len(sys.argv) == 1:
+        print(
+            f"no input file provided\n"
+            f"please give a text input file "
+            f"(it will be treated as Hack Virtual Machine text file)",
+            file=sys.stderr
+            )
+        sys.exit(1)
+    # Get input filename
+    vm_filename = sys.argv[1]
+    # Get output filename
+    asm_filename = vm_to_asm_filename(vm_filename)
 
-# Compile Hack virtual machine code to Hack assembly language
-compile_vm_to_asm(vm_filename, asm_filename, debug=True)
+    # COMPILE
+    compile_vm_to_asm(vm_filename, asm_filename)
 
-
+    return asm_filename
