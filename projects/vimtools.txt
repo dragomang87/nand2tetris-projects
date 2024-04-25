@@ -1,0 +1,2 @@
+Match 'delete stack' block of code:
+\/\/ START[ a-z"\n\\@SP\/AMD=+\-0-9,({_)}\['\]#;JGTLE<>]*END.*
