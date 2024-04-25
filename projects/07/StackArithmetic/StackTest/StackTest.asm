@@ -1,5 +1,6 @@
 
 // VM push constant 17
+// ASM['push value'](17)
 @17
  D  = A
 // ASM['push stack'] (from D)
@@ -9,6 +10,7 @@ A   = A - 1
   M = D
  D  = 0             // optional safety feature
 // VM push constant 17
+// ASM['push value'](17)
 @17
  D  = A
 // ASM['push stack'] (from D)
@@ -26,13 +28,14 @@ A M = M - 1
 A   = A - 1
  D  = M - D
   M = -1
-@ CMP.1
+@compare_label.07_StackArithmetic_StackTest_StackTest.vm.eq.instance_label_1
 D; JEQ
 @SP
 A   = M - 1
   M = 0
-(CMP.1)
+(compare_label.07_StackArithmetic_StackTest_StackTest.vm.eq.instance_label_1)
 // VM push constant 17
+// ASM['push value'](17)
 @17
  D  = A
 // ASM['push stack'] (from D)
@@ -42,6 +45,7 @@ A   = A - 1
   M = D
  D  = 0             // optional safety feature
 // VM push constant 16
+// ASM['push value'](16)
 @16
  D  = A
 // ASM['push stack'] (from D)
@@ -59,13 +63,14 @@ A M = M - 1
 A   = A - 1
  D  = M - D
   M = -1
-@ CMP.2
+@compare_label.07_StackArithmetic_StackTest_StackTest.vm.eq.instance_label_2
 D; JEQ
 @SP
 A   = M - 1
   M = 0
-(CMP.2)
+(compare_label.07_StackArithmetic_StackTest_StackTest.vm.eq.instance_label_2)
 // VM push constant 16
+// ASM['push value'](16)
 @16
  D  = A
 // ASM['push stack'] (from D)
@@ -75,6 +80,7 @@ A   = A - 1
   M = D
  D  = 0             // optional safety feature
 // VM push constant 17
+// ASM['push value'](17)
 @17
  D  = A
 // ASM['push stack'] (from D)
@@ -92,13 +98,14 @@ A M = M - 1
 A   = A - 1
  D  = M - D
   M = -1
-@ CMP.3
+@compare_label.07_StackArithmetic_StackTest_StackTest.vm.eq.instance_label_3
 D; JEQ
 @SP
 A   = M - 1
   M = 0
-(CMP.3)
+(compare_label.07_StackArithmetic_StackTest_StackTest.vm.eq.instance_label_3)
 // VM push constant 892
+// ASM['push value'](892)
 @892
  D  = A
 // ASM['push stack'] (from D)
@@ -108,6 +115,7 @@ A   = A - 1
   M = D
  D  = 0             // optional safety feature
 // VM push constant 891
+// ASM['push value'](891)
 @891
  D  = A
 // ASM['push stack'] (from D)
@@ -125,13 +133,14 @@ A M = M - 1
 A   = A - 1
  D  = M - D
   M = -1
-@ CMP.4
+@compare_label.07_StackArithmetic_StackTest_StackTest.vm.lt.instance_label_4
 D; JLT
 @SP
 A   = M - 1
   M = 0
-(CMP.4)
+(compare_label.07_StackArithmetic_StackTest_StackTest.vm.lt.instance_label_4)
 // VM push constant 891
+// ASM['push value'](891)
 @891
  D  = A
 // ASM['push stack'] (from D)
@@ -141,6 +150,7 @@ A   = A - 1
   M = D
  D  = 0             // optional safety feature
 // VM push constant 892
+// ASM['push value'](892)
 @892
  D  = A
 // ASM['push stack'] (from D)
@@ -158,13 +168,14 @@ A M = M - 1
 A   = A - 1
  D  = M - D
   M = -1
-@ CMP.5
+@compare_label.07_StackArithmetic_StackTest_StackTest.vm.lt.instance_label_5
 D; JLT
 @SP
 A   = M - 1
   M = 0
-(CMP.5)
+(compare_label.07_StackArithmetic_StackTest_StackTest.vm.lt.instance_label_5)
 // VM push constant 891
+// ASM['push value'](891)
 @891
  D  = A
 // ASM['push stack'] (from D)
@@ -174,6 +185,7 @@ A   = A - 1
   M = D
  D  = 0             // optional safety feature
 // VM push constant 891
+// ASM['push value'](891)
 @891
  D  = A
 // ASM['push stack'] (from D)
@@ -191,13 +203,14 @@ A M = M - 1
 A   = A - 1
  D  = M - D
   M = -1
-@ CMP.6
+@compare_label.07_StackArithmetic_StackTest_StackTest.vm.lt.instance_label_6
 D; JLT
 @SP
 A   = M - 1
   M = 0
-(CMP.6)
+(compare_label.07_StackArithmetic_StackTest_StackTest.vm.lt.instance_label_6)
 // VM push constant 32767
+// ASM['push value'](32767)
 @32767
  D  = A
 // ASM['push stack'] (from D)
@@ -207,6 +220,7 @@ A   = A - 1
   M = D
  D  = 0             // optional safety feature
 // VM push constant 32766
+// ASM['push value'](32766)
 @32766
  D  = A
 // ASM['push stack'] (from D)
@@ -224,13 +238,14 @@ A M = M - 1
 A   = A - 1
  D  = M - D
   M = -1
-@ CMP.7
+@compare_label.07_StackArithmetic_StackTest_StackTest.vm.gt.instance_label_7
 D; JGT
 @SP
 A   = M - 1
   M = 0
-(CMP.7)
+(compare_label.07_StackArithmetic_StackTest_StackTest.vm.gt.instance_label_7)
 // VM push constant 32766
+// ASM['push value'](32766)
 @32766
  D  = A
 // ASM['push stack'] (from D)
@@ -240,6 +255,7 @@ A   = A - 1
   M = D
  D  = 0             // optional safety feature
 // VM push constant 32767
+// ASM['push value'](32767)
 @32767
  D  = A
 // ASM['push stack'] (from D)
@@ -257,13 +273,14 @@ A M = M - 1
 A   = A - 1
  D  = M - D
   M = -1
-@ CMP.8
+@compare_label.07_StackArithmetic_StackTest_StackTest.vm.gt.instance_label_8
 D; JGT
 @SP
 A   = M - 1
   M = 0
-(CMP.8)
+(compare_label.07_StackArithmetic_StackTest_StackTest.vm.gt.instance_label_8)
 // VM push constant 32766
+// ASM['push value'](32766)
 @32766
  D  = A
 // ASM['push stack'] (from D)
@@ -273,6 +290,7 @@ A   = A - 1
   M = D
  D  = 0             // optional safety feature
 // VM push constant 32766
+// ASM['push value'](32766)
 @32766
  D  = A
 // ASM['push stack'] (from D)
@@ -290,13 +308,14 @@ A M = M - 1
 A   = A - 1
  D  = M - D
   M = -1
-@ CMP.9
+@compare_label.07_StackArithmetic_StackTest_StackTest.vm.gt.instance_label_9
 D; JGT
 @SP
 A   = M - 1
   M = 0
-(CMP.9)
+(compare_label.07_StackArithmetic_StackTest_StackTest.vm.gt.instance_label_9)
 // VM push constant 57
+// ASM['push value'](57)
 @57
  D  = A
 // ASM['push stack'] (from D)
@@ -306,6 +325,7 @@ A   = A - 1
   M = D
  D  = 0             // optional safety feature
 // VM push constant 31
+// ASM['push value'](31)
 @31
  D  = A
 // ASM['push stack'] (from D)
@@ -315,6 +335,7 @@ A   = A - 1
   M = D
  D  = 0             // optional safety feature
 // VM push constant 53
+// ASM['push value'](53)
 @53
  D  = A
 // ASM['push stack'] (from D)
@@ -333,6 +354,7 @@ A   = A - 1
   M = M + D
  D  = 0             // optional safety feature
 // VM push constant 112
+// ASM['push value'](112)
 @112
  D  = A
 // ASM['push stack'] (from D)
@@ -364,6 +386,7 @@ A   = A - 1
   M = M & D
  D  = 0             // optional safety feature
 // VM push constant 82
+// ASM['push value'](82)
 @82
  D  = A
 // ASM['push stack'] (from D)

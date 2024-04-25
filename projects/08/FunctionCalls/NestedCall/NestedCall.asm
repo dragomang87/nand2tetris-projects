@@ -1,4 +1,50 @@
 
+// Bootloader
+// Sys.init ARG = bootloader SP = 256
+// Sys.init has 0 arguments and ARG WILL BE EMPTY!! not like other functions
+// Sys.init return: at 256
+@return_label.bootloader.shutdown
+  D = A
+@256
+ M  = D
+// Bootloader frame: LCL, ARG, THIS, THAT
+//  - CANNOT assume that they are zero
+@LCL
+  D = M
+@257
+ M  = D
+@ARG
+  D = M
+@258
+ M  = D
+@THIS
+  D = M
+@259
+ M  = D
+@THAT
+  D = M
+@260
+ M  = D
+// Sys.init frame:
+//  - LCL = SP = 261
+//  - ARG = 256
+@261
+  D = A
+@SP
+ M  = D
+@LCL
+ M  = D
+@256
+  D = A
+@ARG
+ M  = D
+// Call Sys.init
+@function_define_label|Sys.init
+0; JMP
+// Sys.init return label
+(return_label.bootloader.shutdown)
+// Bootloader loop forever
+0; JMP
 // VM function Sys.init 0
 // CANNOT assume LCL is zero!!!
 (function_define_label|Sys.init)

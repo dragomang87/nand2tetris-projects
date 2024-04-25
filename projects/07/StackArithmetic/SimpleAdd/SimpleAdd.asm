@@ -1,5 +1,6 @@
 
 // VM push constant 7
+// ASM['push value'](7)
 @7
  D  = A
 // ASM['push stack'] (from D)
@@ -9,6 +10,7 @@ A   = A - 1
   M = D
  D  = 0             // optional safety feature
 // VM push constant 8
+// ASM['push value'](8)
 @8
  D  = A
 // ASM['push stack'] (from D)

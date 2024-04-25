@@ -1,5 +1,6 @@
 
 // VM push constant 10
+// ASM['push value'](10)
 @10
  D  = A
 // ASM['push stack'] (from D)
@@ -14,6 +15,8 @@ A   = A - 1
  D  = M
 @0
  D  = D + A
+// ASM['move stack']
+// D = destination
 // A = stack, M = value
 @SP
 A M = M - 1
@@ -28,6 +31,7 @@ A   = D - M
 A   = M         // optional safety feature
   M = 0         // optional safety feature
 // VM push constant 21
+// ASM['push value'](21)
 @21
  D  = A
 // ASM['push stack'] (from D)
@@ -37,6 +41,7 @@ A   = A - 1
   M = D
  D  = 0             // optional safety feature
 // VM push constant 22
+// ASM['push value'](22)
 @22
  D  = A
 // ASM['push stack'] (from D)
@@ -51,6 +56,8 @@ A   = A - 1
  D  = M
 @2
  D  = D + A
+// ASM['move stack']
+// D = destination
 // A = stack, M = value
 @SP
 A M = M - 1
@@ -70,6 +77,8 @@ A   = M         // optional safety feature
  D  = M
 @1
  D  = D + A
+// ASM['move stack']
+// D = destination
 // A = stack, M = value
 @SP
 A M = M - 1
@@ -84,6 +93,7 @@ A   = D - M
 A   = M         // optional safety feature
   M = 0         // optional safety feature
 // VM push constant 36
+// ASM['push value'](36)
 @36
  D  = A
 // ASM['push stack'] (from D)
@@ -98,6 +108,8 @@ A   = A - 1
  D  = M
 @6
  D  = D + A
+// ASM['move stack']
+// D = destination
 // A = stack, M = value
 @SP
 A M = M - 1
@@ -112,6 +124,7 @@ A   = D - M
 A   = M         // optional safety feature
   M = 0         // optional safety feature
 // VM push constant 42
+// ASM['push value'](42)
 @42
  D  = A
 // ASM['push stack'] (from D)
@@ -121,6 +134,7 @@ A   = A - 1
   M = D
  D  = 0             // optional safety feature
 // VM push constant 45
+// ASM['push value'](45)
 @45
  D  = A
 // ASM['push stack'] (from D)
@@ -135,6 +149,8 @@ A   = A - 1
  D  = M
 @5
  D  = D + A
+// ASM['move stack']
+// D = destination
 // A = stack, M = value
 @SP
 A M = M - 1
@@ -154,6 +170,8 @@ A   = M         // optional safety feature
  D  = M
 @2
  D  = D + A
+// ASM['move stack']
+// D = destination
 // A = stack, M = value
 @SP
 A M = M - 1
@@ -168,6 +186,7 @@ A   = D - M
 A   = M         // optional safety feature
   M = 0         // optional safety feature
 // VM push constant 510
+// ASM['push value'](510)
 @510
  D  = A
 // ASM['push stack'] (from D)
@@ -182,6 +201,8 @@ A   = A - 1
  D  = A
 @6
  D  = D + A
+// ASM['move stack']
+// D = destination
 // A = stack, M = value
 @SP
 A M = M - 1
