@@ -1,3 +1,4 @@
 nand2tetris/
 projects/dates.txt
 *__pycache__
+*.out
