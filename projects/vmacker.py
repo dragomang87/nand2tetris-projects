@@ -887,17 +887,21 @@ VM['push']['pointer'] = lambda i: (
 
 # Implementation: static variables are file dependent but fixed!!
 # names can only be filename.i
-static = "static_name_missing"
+static_label = lambda i: (
+        f"static"
+        f"{separator}{filename_label}"
+        f"{separator}{i}"
+        )
 
 VM['push']['static'] = lambda i: (
         f"\n// VM push static {i}"
-        + ASM['push ram'](f"{static}.{i}")
+        + ASM['push ram'](f"{static_label(i)}")
         )
 
 VM['pop']['static'] = lambda i : (
         f"\n// VM pop  static {i}"
         + ASM['pop stack'] +        # 3+1 lines
-        f"\n@{static}.{i}"
+        f"\n@{static_label(i)}"
         f"\n M  = D"
         f"\n  D = 0             // optional safety feature"
         ) # 5+2 lines
@@ -1008,7 +1012,7 @@ for segment in ['local', 'argument', 'this', 'that', 'temp']:
             f"\nD; J{comparisons[comparison]}"
             ) # 7+2 lines
     ASM['if']['static'  ][comparison] = lambda label, i, segment=segment, comparison=comparison: (
-            f"\n@static{separator}{filename_label}{separator}{i}"
+            f"\n@{static_label(i)}"
             f"\n  D = M"
             f"\n@SP"
             f"\nAM  = M - 1"
@@ -1657,9 +1661,6 @@ def compile_vm_to_asm(vm_filename, debug=True):
     # Set the filename label
     global filename_label
     filename_label = ASM['filename_label'](vm_filename)
-    # Set the static label
-    global static
-    static = os.path.basename(remove_vm_extension(vm_filename))
     # Compile
     with open( vm_filename, 'r') as virtual_machine, \
          open(asm_filename, 'w') as assembly:
