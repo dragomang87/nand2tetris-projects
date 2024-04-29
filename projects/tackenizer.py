@@ -1,6 +1,42 @@
 ################################################################################
-# JACK TOKENS
+# JACK TOKENS AND COMMENTS
 ################################################################################
+
+# Tokens vs Syntax:
+#   - tokens are always the same
+#     e.g. ) and ( are (or at least should be) always two independent tokens,
+#     in this case symbol tokens as defined below
+#   - syntax depend on context from previous syntax
+#     e.g. parenthesis can be either expression or arguments
+
+# Notes:
+#   - strings and comments are part of syntax
+#   - tokens generally come before syntax
+#     but this does not work for strings and comments
+#   - strings and comments behave somewhere in between tokens and syntax;
+#     this is unavoidable because while inside strings and comments
+#       - spaces are part of the string/comment and not tokens separators
+#       - tokens are not tokens anymore
+#       - strings and comments inside each other are not strings or comment
+#   - pure tokenizing would mark ", //, /*, */  and spaces all as token,
+#     instead syntax matching opening and closing strings and comments
+#   - comments and strings can disable each other and other tokens
+#       - // or /* inside a string are not comments and
+#       - "  inside a comment is not a string
+#       - tokens inside comments or strings are not tokens
+#       - block comments spill over to other lines
+#   - comments and strings are part of the syntax
+#     but are thus parsed the token stage
+
+# There are two types of comments
+#   - inline comments: everything between // and end of line
+#     (when not inside a string or block comment)
+#   - block comments: everything between /* and */ including newlines
+#     (when not inside string or inline comment)
+#     because opening and closing delimiter are different
+#     this raises the question of whether block comments
+#       - nest each other
+#       - disable each other
 
 # There are five types of tokens (tags):
 tags = ['keyword', 'symbol', 'intConst', 'stringConst', 'identifier'],
@@ -143,7 +179,7 @@ def token_separator(line):
     # (if tokens[-1] = '""' it means the jack code
     #  had an actual empty string token "" at the end of the line)
     if tokens[-1] == '"""':
-        token = token[:-1]
+        tokens = tokens[:-1]
     # Return the list of tokens
     return tokens
 
@@ -182,13 +218,14 @@ identifier_characters = ( # map ASCII codes to empty string
         )
 
 def classify(token):
+    # We assume strings and symbols have been isolated 
 
     # Check if keyword or symbol
     if token in TOKENS:
         return TOKENS[token]
 
     # Check if integer
-    try
+    try:
         int(token)
         return 'intConst'
     except:
@@ -197,16 +234,16 @@ def classify(token):
     # Check if identifier by
     #   - checking that removing identifier_characters we get the empty string
     #   - the first character is not a digit
-    if not token.translate(identifier_characters)
-    and token[0] not in [str(digit) for digit in range(10)]:
+    if token.translate(identifier_characters) == "" and token[0] not in "0123456789":
         return 'identifier'
 
     # Check if string
-    # (newlines have been removed with the spaces)
-    if token[0] == token[-1] == '"' and '"' not in token[1:-1]:
+    # (newlines have been removed with the spaces
+    #  and quotes are even are not inside by construction)
+    if token[0] == token[-1] == '"':
         return 'stringConst'
 
-    except ValueError(
+    raise ValueError(
             f"{token}: invalid Jack token\n"
             f"not a keyword, symbol, integer, string or valid identifier"
             )
@@ -216,12 +253,12 @@ def classify(token):
 ################################################################################
 
 def remove_jack_extension(jack_filename):
-    if vm_filename[-5:] != ".jack":
+    if jack_filename[-5:] != ".jack":
         import warnings
         warnings.warn(f"Warning: extension of input file {jack_filename} is not '.jack'")
-        return vm_filename
+        return jack_filename
     else:
-        return vm_filename[:-5]
+        return jack_filename[:-5]
 
 def clean_line(line):
     # Remove comments
@@ -236,36 +273,96 @@ tag_token = lambda token, tag: (
 
 def tokenize(jack_filename, debug=True):
     # Get output filename
-    tokens_filename = remove_vm_extension(jack_filename) + ".jacken"
-    if debug: print(f"Compiling file {jack_filename} into {token_filename}")
+    tokens_filename = remove_jack_extension(jack_filename) + ".jacken"
+    if debug: print(f"Compiling file {jack_filename} into {tokens_filename}")
     # Tokenize
     with open( jack_filename, 'r') as jack, \
-         open(token_filename, 'w') as tokens_file:
+         open(tokens_filename, 'w') as tokens_file:
+        # Keep track of if we are waiting to close a block comment or not
+        block_comment = False
+        last_block_comment_start = 0
         # Loop over lines
         for (line_number, line) in enumerate(jack, 1):
-            # Remove comments, leading and trailing spaces
-            line = clean_line(line)
-            # Ignore empty lines
-            if line == '': continue
-            # Try to separate the tokens
-            try:
-                tokens = token_separator(line)
-                if debug: print(
-                        f"Separating tokens in line {line_number}: '{line}'"
-                        )
-            except Exception as e:
-                raise Exception(
-                        f"Separating tokens in line {line_number} FAILED: '{line}'"
-                        ) from e
-            # Try to classify tokens
-            try:
-                tags = [tag_token(token, classify(token)) for token in tokens]
-                [tokens_file.write(tag) for tag in tags]
-                if debug: print(
-                        f"Tokenizing line {line_number}: '{line}' -> {tokens}"
-                        )
-            except Exception as e:
-                raise Exception(
-                        f"Tokenizing line {line_number} FAILED: '{line}' -> {tokens}"
+            # Things to keep track of
+            #   - comments and strings can disable each other:
+            #     // or /* inside a string are not comments and
+            #     "  inside a comment is not a string
+            #   - block comments spill over to other lines
+            # Logic:
+            #   - we need different parsing modes:
+            #       string
+            #       comment
+            #       block comment
+            #       easy tokens (tokens not interfering with each other
+            #                    outside of strings and comments)
+            #   - need to have a variable to keep track
+            #     if we are still in a block comment at the next line
+            while line: # not empty
+                # REMOVE COMMENTS
+                # Comment logic:
+                #   - clean line before for "//" to invalidate "/*" or "*/"
+                #   - clean line after  if  "/*" or "*/" can work after "//"
+                # Remove inline comments, leading and trailing spaces
+                line = clean_line(line)
+                # Skip block comment
+                if block_comment:
+                    if "*/" in line:
+                        # Keep only what's after the last "*/"
+                        line = line.split("*/")[-1]
+                    else:
+                        # Do not process if line is in block comment
+                        # and there is no closing "*/"
+                        continue
+                # Check for start of block comment
+                # Need to check if it closes and opens again in the same line
+                if "/*" in line:
+                    # Then split at /*
+                    line = line.split("/*")
+                    # Then check if each piece has a closing */
+                # PROCESS LINE
+                # Ignore empty lines
+                # (need to check after block comments are processed)
+                if line == '': continue
+                # Try to separate the tokens
+                try:
+                    tokens = token_separator(line)
+                    if debug: print(
+                            f"Separating tokens in line {line_number}: '{line}'"
+                            )
+                except Exception as e:
+                    raise Exception(
+                            f"Separating tokens in line {line_number} FAILED: '{line}'"
+                            ) from e
+                # Try to classify tokens
+                try:
+                    tags = [tag_token(token, classify(token)) for token in tokens]
+                    [tokens_file.write(tag) for tag in tags]
+                    if debug: print(
+                            f"Tokenizing line {line_number}: '{line}' -> {tokens}"
+                            )
+                except Exception as e:
+                    raise Exception(
+                            f"Tokenizing line {line_number} FAILED: '{line}' -> {tokens}"
                         ) from e
     return tokens_filename
+
+
+################################################################################
+# JACK TOKENIZER SCRIPT
+################################################################################
+
+if __name__ == "__main__":
+    # INPUT FILE
+    import sys
+    # Check if input file is given
+    if len(sys.argv) == 1:
+        print(
+            f"no input file provided\n"
+            f"please give a text input file "
+            f"(it will be treated as Hack Virtual Machine text file)",
+            file=sys.stderr
+            )
+        sys.exit(1)
+
+    # COMPILE input file
+    tokenize(sys.argv[1])
