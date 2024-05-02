@@ -10,10 +10,9 @@
 #     e.g. parenthesis can be either expression or arguments
 
 # Notes:
-#   - strings and comments are part of syntax
-#   - tokens generally come before syntax
-#     but this does not work for strings and comments
-#   - strings and comments behave somewhere in between tokens and syntax;
+#   - tokens come before syntax
+#   - strings and comments are part of syntax but are parsed at tokens
+#     thus strings and comments behave somewhere in between tokens and syntax;
 #     this is unavoidable because while inside strings and comments
 #       - spaces are part of the string/comment and not tokens separators
 #       - tokens are not tokens anymore
@@ -37,6 +36,11 @@
 #     this raises the question of whether block comments
 #       - nest each other
 #       - disable each other
+
+# True tokenization:
+#   - everything, including spaces " // /* and */ are tokens
+#   - syntax parsing and abstract tree would then
+#     reconstruct the strings and remove comments on the next pass
 
 # There are five types of tokens (tags):
 tags = ['keyword', 'symbol', 'intConst', 'stringConst', 'identifier'],
@@ -87,19 +91,134 @@ TAGS =  {
 # JACK TOKEN SPLITTER
 ################################################################################
 
-# Split the text into candidate tokens
+# HYBRID TOKENIZER
 
+# We use a dictionary as a functionto tokenize
+# The advantage is that we let the dictionary match what we are tokenizing
+# while we just treat the line always in the same way
+# (we use the dictionary keys instead of if statements)
+# Output: a tuple of size two containing
+#   - the token
+#   - the rest of the line
 # Logic:
+#   - in case of symbols or delimiters we passed the rest of the line
+#   - in case of 'other' tokens we pass the whole line including the token
+#   - in case of comments the token is None
+#   - in case of unterminated block comment, the rest of the line is None
+#     in all other cases it is a string
+# In case of comments the token is None
+TOKEN_SEPARATOR = {}
+
+# Comments
+# If inline comment then absorb the whole line
+# The token is None and the rest of the line is empty
+TOKEN_SEPARATOR['//'] = lambda line: (None, '')
+# If block comment then absorb until */
+# The token is None and without */ then the rest of the line is also None
+# to signal that the block comment is not closed
+split_or_nothing = lambda split: None if len(split) == 1 else split[1].strip()
+TOKEN_SEPARATOR['/*'] = lambda line: (None,
+        split_or_nothing(line.split('*/', maxsplit=1))
+        )
+
+# Symbols
+# Just return the symbol and the line, nothing to do
+for symbol in TAGS['symbol']:
+    TOKEN_SEPARATOR[symbol] = lambda line: (symbol, line.strip())
+
+# Strings
+# We assume the leading quote has been stripped
+# and we assume the string is closed by assuming the split has length 2
+# If there is no quote and the split has length 1
+# then this is a syntax error and we don't stop the exception cause by split[1]
+quote_and_strip = lambda split: ('"' + split[0] + '"', split[1].strip())
+TOKEN_SEPARATOR['"'] = lambda line: quote_and_strip(line.split('"', maxsplit=1))
+
+# Numbers, Keywords and Identifiers
+# If we are expectin a number, keyword or identifier
+# then just take the first piece up to the next space
+# This assumes that we have already tested for comments, symbols and strings
+# Logic:
+#   - use split() and maxsplit=1 to split at the first space only
+#   - using the default separator=None automatically strips
+#     the spaces from both line and split[0] and split[1]
+#     (as opposed as the separator for symbols that calls strip() explicitly)
+split_or_everything = lambda split: split if len(split) == 2 else split + ['']
+TOKEN_SEPARATOR['other'] = lambda line: split_or_everything(line.split(maxsplit=1))
+
+
+#def token_separator(line):
+def separate_line(line):
+    tokens = []
+    while line:
+        # Check if starting with // or */
+        if line[:2] in TOKEN_SEPARATOR:
+            _, line = TOKEN_SEPARATOR[line[:2]](line[2:])
+            continue
+        # Check if starting with symbol or "
+        if line[:1] in TOKEN_SEPARATOR:
+            try:
+                token, line = TOKEN_SEPARATOR[line[:2]](line[2:])
+            except IndexError as e:
+                raise("{line}: string missing end quote \"") from e
+            tokens +=[token]
+            continue
+        # In all other case separate until next space
+        token, line = TOKEN_SEPARATOR['other'](line)
+        tokens += [token]
+    # Return the list of tokens and the status of the line
+    # (there will be either '' or None
+    # depending on whether there is an open block comment)
+    return tokens, line
+
+
+
+
+
+
+
+# OTHER FAILED LOGICS
+
+
+
+
+# TRUE-TOKENIZER LOGIC
+# Spaces and comment delimiters should be kept as tokens
+# The abstract tree should be take care of interpreting
+# when comments and strings start and end
+# Advantage: comments can be added in debug compiled code
+# Logic:
+#   - we cannot use spaces as separators anymore
+#   - newlines are always removed because they are not allowed in strings
+#   - we can use newlines instead of spaces to separate symbols
+#     (because otherwise )
+# Problems
+#   - translators can only translate single characters
+#   - //, /* and */ are compositions of / and *
+#     therefore the translator for / and * will inject
+#     newlines in between //, /* and */
+#   - this translator injects the newlines
+#       newline_injector =
+#           {ord(symbol): f"\n{symbol}\n" for symbol in TAGS['symbol'] + ['"']}
+#     (translators need the character ascii/unicode number,
+#     therefore we need to use ord(character) instead of character as key)
+#   - we still need to separate using spaces because there is no way
+#     to correctly introduce newlines between words and spaces
+#   - consecutive spaces then need to be joined back together
+
+
+
+
+
+# NO-COMMENTS LOGIC
+# Split the text into candidate tokens assuming no comments
 #   - Strings are allowed white spaces, but any other white space separates tokens
 #     Therefore we need to tokenize strings first and then the rest
 #   - The rest is tokenized by spaces or symbols
 #   - We inject spaces around every symbol
 #   - Then everything that is not a string is tokenized by spaces
-
-
-# Strings
-# How to distinguish from the spaces to split?
-# Proposal
+# This only works if comments are already removed
+# Implementation:
 #   - Split at double quotes
 #       - splits = line.split('"')
 #       - splits[0]  = '' if line starts with "
@@ -109,14 +228,16 @@ TAGS =  {
 #     then there was an odd number of "
 #   - raise an exception if len(splits) is even
 #   - add the quotes back on the odd index entries
+#   - for the other entries apply the translator
+#     symbol_separator = {symbol: f" {symbol} " for symbol in TAGS['symbol']}
+#     this translator surrounds every symbol by spaces
+#   - then splitting the string at spaces will isolate all symbol tokens
+# Failures:
+#   - comments can "disable" quotes
+#   - quotes can disable comments
+#   - therefore strings and comments have to be tokenized at the same time
 
-# Symbol separation translator
-# We make sure every symbol is surrounded by spaces
-# then splitting the string at spaces will isolate all symbol tokens
-# The following is the translator to add these spaces
-symbol_separator = {symbol: f" {symbol} " for symbol in TAGS['symbol']}
-
-def token_separator(line):
+def nocomment_separator(line):
     # We assume the line
     #   - has no newlines
     #   - has no comments
@@ -185,12 +306,6 @@ def token_separator(line):
 
 
 
-
-# Once symbols are separated
-# keywords, integers and identifiers should be separated too
-# because spaces are not allowed between them
-
-
 ################################################################################
 # JACK TOKEN CLASSIFIER
 ################################################################################
@@ -218,7 +333,7 @@ identifier_characters = ( # map ASCII codes to empty string
         )
 
 def classify(token):
-    # We assume strings and symbols have been isolated 
+    # We assume tokens have been isolated by the previous process
 
     # Check if keyword or symbol
     if token in TOKENS:
@@ -239,7 +354,7 @@ def classify(token):
 
     # Check if string
     # (newlines have been removed with the spaces
-    #  and quotes are even are not inside by construction)
+    #  and quotes are even and not inside by construction)
     if token[0] == token[-1] == '"':
         return 'stringConst'
 
@@ -252,6 +367,15 @@ def classify(token):
 # JACK TOKENIZER
 ################################################################################
 
+#lines = iter(cdata.splitlines())
+#for line in lines:
+#    if exp.match(line):
+#       #increment the position of the iterator by 5
+#       for _ in itertools.islice(lines, 4):
+#           pass
+#       continue # skip 1+4 lines
+#    print line
+
 def remove_jack_extension(jack_filename):
     if jack_filename[-5:] != ".jack":
         import warnings
@@ -259,13 +383,6 @@ def remove_jack_extension(jack_filename):
         return jack_filename
     else:
         return jack_filename[:-5]
-
-def clean_line(line):
-    # Remove comments
-    line = line.split('//')[0]
-    # Remove leading and trailing spaces
-    # (leave inner spaces as they may be part of strings)
-    return line.strip()
 
 tag_token = lambda token, tag: (
         f"<{tag}> {token} </{tag}>\n"
@@ -297,6 +414,9 @@ def tokenize(jack_filename, debug=True):
             #                    outside of strings and comments)
             #   - need to have a variable to keep track
             #     if we are still in a block comment at the next line
+            # Remove leading and trailing spaces
+            # (leave inner spaces as they may be part of strings)
+            line = line.strip()
             while line: # not empty
                 # REMOVE COMMENTS
                 # Comment logic:
