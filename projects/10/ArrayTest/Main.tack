@@ -28,7 +28,7 @@
 <symbol> . </symbol>
 <identifier> readInt </identifier>
 <symbol> ( </symbol>
-<stringConst> "HOW MANY NUMBERS? " </stringConst>
+<stringConstant> "HOW MANY NUMBERS? " </stringConstant>
 <symbol> ) </symbol>
 <symbol> ; </symbol>
 <keyword> let </keyword>
@@ -44,7 +44,7 @@
 <keyword> let </keyword>
 <identifier> i </identifier>
 <symbol> = </symbol>
-<intConst> 0 </intConst>
+<integerConstant> 0 </integerConstant>
 <symbol> ; </symbol>
 <keyword> while </keyword>
 <symbol> ( </symbol>
@@ -63,7 +63,7 @@
 <symbol> . </symbol>
 <identifier> readInt </identifier>
 <symbol> ( </symbol>
-<stringConst> "ENTER THE NEXT NUMBER: " </stringConst>
+<stringConstant> "ENTER THE NEXT NUMBER: " </stringConstant>
 <symbol> ) </symbol>
 <symbol> ; </symbol>
 <keyword> let </keyword>
@@ -71,18 +71,18 @@
 <symbol> = </symbol>
 <identifier> i </identifier>
 <symbol> + </symbol>
-<intConst> 1 </intConst>
+<integerConstant> 1 </integerConstant>
 <symbol> ; </symbol>
 <symbol> } </symbol>
 <keyword> let </keyword>
 <identifier> i </identifier>
 <symbol> = </symbol>
-<intConst> 0 </intConst>
+<integerConstant> 0 </integerConstant>
 <symbol> ; </symbol>
 <keyword> let </keyword>
 <identifier> sum </identifier>
 <symbol> = </symbol>
-<intConst> 0 </intConst>
+<integerConstant> 0 </integerConstant>
 <symbol> ; </symbol>
 <keyword> while </keyword>
 <symbol> ( </symbol>
@@ -106,7 +106,7 @@
 <symbol> = </symbol>
 <identifier> i </identifier>
 <symbol> + </symbol>
-<intConst> 1 </intConst>
+<integerConstant> 1 </integerConstant>
 <symbol> ; </symbol>
 <symbol> } </symbol>
 <keyword> do </keyword>
@@ -114,7 +114,7 @@
 <symbol> . </symbol>
 <identifier> printString </identifier>
 <symbol> ( </symbol>
-<stringConst> "THE AVERAGE IS: " </stringConst>
+<stringConstant> "THE AVERAGE IS: " </stringConstant>
 <symbol> ) </symbol>
 <symbol> ; </symbol>
 <keyword> do </keyword>

@@ -151,7 +151,7 @@
 <identifier> size </identifier>
 <symbol> ) </symbol>
 <symbol> < </symbol>
-<intConst> 254 </intConst>
+<integerConstant> 254 </integerConstant>
 <symbol> ) </symbol>
 <symbol> & </symbol>
 <symbol> ( </symbol>
@@ -161,7 +161,7 @@
 <identifier> size </identifier>
 <symbol> ) </symbol>
 <symbol> < </symbol>
-<intConst> 510 </intConst>
+<integerConstant> 510 </integerConstant>
 <symbol> ) </symbol>
 <symbol> ) </symbol>
 <symbol> { </symbol>
@@ -175,7 +175,7 @@
 <symbol> = </symbol>
 <identifier> size </identifier>
 <symbol> + </symbol>
-<intConst> 2 </intConst>
+<integerConstant> 2 </integerConstant>
 <symbol> ; </symbol>
 <keyword> do </keyword>
 <identifier> draw </identifier>
@@ -196,7 +196,7 @@
 <symbol> ( </symbol>
 <identifier> size </identifier>
 <symbol> > </symbol>
-<intConst> 2 </intConst>
+<integerConstant> 2 </integerConstant>
 <symbol> ) </symbol>
 <symbol> { </symbol>
 <keyword> do </keyword>
@@ -209,7 +209,7 @@
 <symbol> = </symbol>
 <identifier> size </identifier>
 <symbol> - </symbol>
-<intConst> 2 </intConst>
+<integerConstant> 2 </integerConstant>
 <symbol> ; </symbol>
 <keyword> do </keyword>
 <identifier> draw </identifier>
@@ -230,7 +230,7 @@
 <symbol> ( </symbol>
 <identifier> y </identifier>
 <symbol> > </symbol>
-<intConst> 1 </intConst>
+<integerConstant> 1 </integerConstant>
 <symbol> ) </symbol>
 <symbol> { </symbol>
 <keyword> do </keyword>
@@ -254,7 +254,7 @@
 <identifier> size </identifier>
 <symbol> ) </symbol>
 <symbol> - </symbol>
-<intConst> 1 </intConst>
+<integerConstant> 1 </integerConstant>
 <symbol> , </symbol>
 <identifier> x </identifier>
 <symbol> + </symbol>
@@ -270,7 +270,7 @@
 <symbol> = </symbol>
 <identifier> y </identifier>
 <symbol> - </symbol>
-<intConst> 2 </intConst>
+<integerConstant> 2 </integerConstant>
 <symbol> ; </symbol>
 <keyword> do </keyword>
 <identifier> Screen </identifier>
@@ -295,7 +295,7 @@
 <symbol> , </symbol>
 <identifier> y </identifier>
 <symbol> + </symbol>
-<intConst> 1 </intConst>
+<integerConstant> 1 </integerConstant>
 <symbol> ) </symbol>
 <symbol> ; </symbol>
 <symbol> } </symbol>
@@ -316,7 +316,7 @@
 <identifier> size </identifier>
 <symbol> ) </symbol>
 <symbol> < </symbol>
-<intConst> 254 </intConst>
+<integerConstant> 254 </integerConstant>
 <symbol> ) </symbol>
 <symbol> { </symbol>
 <keyword> do </keyword>
@@ -342,7 +342,7 @@
 <symbol> , </symbol>
 <identifier> y </identifier>
 <symbol> + </symbol>
-<intConst> 1 </intConst>
+<integerConstant> 1 </integerConstant>
 <symbol> ) </symbol>
 <symbol> ; </symbol>
 <keyword> let </keyword>
@@ -350,7 +350,7 @@
 <symbol> = </symbol>
 <identifier> y </identifier>
 <symbol> + </symbol>
-<intConst> 2 </intConst>
+<integerConstant> 2 </integerConstant>
 <symbol> ; </symbol>
 <keyword> do </keyword>
 <identifier> Screen </identifier>
@@ -373,7 +373,7 @@
 <identifier> size </identifier>
 <symbol> ) </symbol>
 <symbol> - </symbol>
-<intConst> 1 </intConst>
+<integerConstant> 1 </integerConstant>
 <symbol> , </symbol>
 <identifier> x </identifier>
 <symbol> + </symbol>
@@ -398,7 +398,7 @@
 <symbol> ( </symbol>
 <identifier> x </identifier>
 <symbol> > </symbol>
-<intConst> 1 </intConst>
+<integerConstant> 1 </integerConstant>
 <symbol> ) </symbol>
 <symbol> { </symbol>
 <keyword> do </keyword>
@@ -420,7 +420,7 @@
 <identifier> size </identifier>
 <symbol> ) </symbol>
 <symbol> - </symbol>
-<intConst> 1 </intConst>
+<integerConstant> 1 </integerConstant>
 <symbol> , </symbol>
 <identifier> y </identifier>
 <symbol> , </symbol>
@@ -438,7 +438,7 @@
 <symbol> = </symbol>
 <identifier> x </identifier>
 <symbol> - </symbol>
-<intConst> 2 </intConst>
+<integerConstant> 2 </integerConstant>
 <symbol> ; </symbol>
 <keyword> do </keyword>
 <identifier> Screen </identifier>
@@ -459,7 +459,7 @@
 <symbol> , </symbol>
 <identifier> x </identifier>
 <symbol> + </symbol>
-<intConst> 1 </intConst>
+<integerConstant> 1 </integerConstant>
 <symbol> , </symbol>
 <identifier> y </identifier>
 <symbol> + </symbol>
@@ -484,7 +484,7 @@
 <identifier> size </identifier>
 <symbol> ) </symbol>
 <symbol> < </symbol>
-<intConst> 510 </intConst>
+<integerConstant> 510 </integerConstant>
 <symbol> ) </symbol>
 <symbol> { </symbol>
 <keyword> do </keyword>
@@ -506,7 +506,7 @@
 <symbol> , </symbol>
 <identifier> x </identifier>
 <symbol> + </symbol>
-<intConst> 1 </intConst>
+<integerConstant> 1 </integerConstant>
 <symbol> , </symbol>
 <identifier> y </identifier>
 <symbol> + </symbol>
@@ -518,7 +518,7 @@
 <symbol> = </symbol>
 <identifier> x </identifier>
 <symbol> + </symbol>
-<intConst> 2 </intConst>
+<integerConstant> 2 </integerConstant>
 <symbol> ; </symbol>
 <keyword> do </keyword>
 <identifier> Screen </identifier>
@@ -539,7 +539,7 @@
 <identifier> size </identifier>
 <symbol> ) </symbol>
 <symbol> - </symbol>
-<intConst> 1 </intConst>
+<integerConstant> 1 </integerConstant>
 <symbol> , </symbol>
 <identifier> y </identifier>
 <symbol> , </symbol>

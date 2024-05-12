@@ -43,15 +43,19 @@
 #     reconstruct the strings and remove comments on the next pass
 
 # There are five types of tokens (tags):
-tags = ['keyword', 'symbol', 'intConst', 'stringConst', 'identifier'],
+tags = ['keyword', 'symbol', 'integerConstant', 'stringConstant', 'identifier']
+# Notice:
+#   - in the slides there is a typo in the definition: 'StringConstant'
+#   - in the slides output sample intConst and stringConst
+#     are used to save space
 
-# Integer (intConst)
+# Integer (integerConstant)
 #   digits
 
 # Identifiers:
 #   letters, digits and underscores not starting with a digit
 
-# Strings (stringConst)
+# Strings (stringConstant)
 #   any characters except " and newlines enclosed by "
 
 # Keywords and Symbols:
@@ -123,7 +127,7 @@ def classify(token):
     # Check if integer
     try:
         int(token)
-        return 'intConst'
+        return 'integerConstant'
     except:
         pass
 
@@ -137,7 +141,7 @@ def classify(token):
     # (newlines have been removed with the spaces
     #  and quotes are even and not inside by construction)
     if token[0] == token[-1] == '"':
-        return 'stringConst'
+        return 'stringConstant'
 
     raise ValueError(
             f"{token}: invalid Jack token\n"
@@ -177,7 +181,7 @@ def classify(token):
 #   - in case of // comments it does not matter because everything is ignored
 #     the output of the rest of the line is '' and the token is None
 #   - in case of 'other' tokens we pass the whole line including the token
-# In case of comments the token is None
+#   - in case of open block comments the token is None
 TOKEN_SEPARATOR = {}
 
 # Comments
@@ -195,6 +199,15 @@ split_or_nothing = lambda split: None if len(split) == 1 else split[1].strip()
 TOKEN_SEPARATOR['/\n\n*'] = lambda line: (None,
         split_or_nothing(line.split('*\n\n/', maxsplit=1))
         )
+#   - if a block comment is left open
+#     then the same block comment separator will be used
+#     to check the line for closure
+#     However, this happens outside the line separators
+#     and therefore before newlines are injected
+#     We need a block comment separator without newlines
+TOKEN_SEPARATOR['/*'    ] = lambda line: (None,
+        split_or_nothing(line.split('*/',     maxsplit=1))
+        )
 
 # Symbols
 # We assume that the symbol is still present in the line
@@ -208,19 +221,22 @@ for symbol in TAGS['symbol']:
 #     therefore we split line[1:] and not just line
 #   - we assume the string is closed by assuming the split has length 2
 #     (this is implicit in the fact that we access split[1] without check);
-#     if there is no quote and the split has length 1
-#     then this is a syntax error and we don't stop the exception cause by split[1],
-#     it will be handled by the line separator
-#   - we put the quotes back into the string if the command succeeds
-#     because the quote is used by the tokenizer to tag strings correctly
+#     if there is no quote then this is a syntax error,
+#     then split will have length one and split[1] will throw an exception
+#     that will be handled by the line separator
 #   - we remove all the newlines from the string token
 #     because no newlines are allowed and if there were any
 #     they have been injected by the line separator to handle symbols
+#   - we put the quotes back into the string if the command succeeds
+#     because the quote is used by the tokenizer to tag strings correctly
+#     The tokenizer can decide to strip the quotes if the syntax requires it
 quote_and_strip = lambda split: (
         '"' + split[0].replace("\n", "") + '"',
         split[1].strip(),
         )
-TOKEN_SEPARATOR['"'] = lambda line: quote_and_strip(line[1:].split('"', maxsplit=1))
+TOKEN_SEPARATOR['"'] = lambda line: quote_and_strip(
+        line[1:].split('"', maxsplit=1)
+        )
 
 # Numbers, Keywords and Identifiers
 # If we are expectin a number, keyword or identifier
@@ -365,19 +381,27 @@ def remove_jack_extension(jack_filename):
     else:
         return jack_filename[:-5]
 
-xml_token = lambda token, tag: (
-        f"<{tag}> {token} </{tag}>\n"
+xml_token = lambda token: (
+        f"<{token[0]}> {token[1]} </{token[0]}>\n"
         )
 
-TOKEN_SEPARATOR[None] = (None, None)
-
-def tokenize(jack_filename, debug=True):
-    # Get output filename
-    tokens_filename = remove_jack_extension(jack_filename) + ".jacken"
-    if debug: print(f"Compiling file {jack_filename} into {tokens_filename}")
+def tokenize(jack_filename, output_file=True, debug=True):
+    # Open input  file
+    jack = open(jack_filename, 'r')
+    if debug: print(f"Tokenizing file {jack_filename}")
+    # Open output file if requested
+    if output_file:
+        # Get output filename
+        tack_filename = remove_jack_extension(jack_filename) + ".tack"
+        # Open the file
+        tack = open(tack_filename, 'w')
+        if debug: print(f"Saving tokens to {tack_filename}")
+    else:
+        # Create an empty context manager if no output file is required
+        from contextlib import nullcontext
+        tack = nullcontext
     # Tokenize
-    with open(  jack_filename, 'r') as jack, \
-         open(tokens_filename, 'w') as tokens_file:
+    with jack, tack:
         # Things to keep track of
         #   - comments and strings can disable each other:
         #     // or /* inside a string are not comments and
@@ -399,10 +423,14 @@ def tokenize(jack_filename, debug=True):
         #       enumerate(jack, 1)
         # Keep track of if we are waiting to close a block comment or not
         open_block_comment = False
+        # Variable for the tokens
+        all_tokens = []
         # Loop over lines
         for (line_number, line) in enumerate(jack, 1):
+            # Remove trailing newline for convenience of debug print
+            line = line.strip()
             # SEPARATE LINE
-            if debug: print(f"Separating line {line_number}: '{line[:-1]}'")
+            if debug: print(f"Separating line {line_number}: '{line}'")
             # Separate open block comment
             if open_block_comment:
                 # Parse block comment
@@ -418,7 +446,7 @@ def tokenize(jack_filename, debug=True):
                 line_tokens, line = separate_line(line)
             except Exception as e:
                 raise Exception(
-                        f"Separating line {line_number} FAILED: '{line[:-1]}'"
+                        f"Separating line {line_number} FAILED: '{line}'"
                         ) from e
             # If a block comment was opened and not closed
             # then line is None and we mark it open
@@ -430,16 +458,22 @@ def tokenize(jack_filename, debug=True):
             # Try to classify tokens
             if debug: print(f"Tokenizing line {line_number}: {line_tokens}")
             try:
-                tag_tokens = [(token, classify(token)) for token in line_tokens]
+                # Classify line tokens
+                tag_tokens = [(classify(token), token, ('line', line_number))
+                              for token in line_tokens]
                 if debug: print( f"Tokens   line {line_number}: {tag_tokens}")
-                xml_tokens = [xml_token(*tag) for tag in tag_tokens]
+                # Collect with previous tokens
+                all_tokens+= tag_tokens
+                # Format tokens in XML
+                xml_tokens = [xml_token(token)  for token in tag_tokens]
                 if debug: print( f"XML tags line {line_number}: {xml_tokens}")
-                [tokens_file.write(xml)       for xml in xml_tokens]
+                # Write XML formatted tokens to file
+                _          = [tack.write(token) for token in xml_tokens]
             except Exception as e:
                 raise Exception(
                         f"Tokenizing line {line_number} FAILED: {line_tokens}"
                     ) from e
-    return tokens_filename
+    return (tack_filename, all_tokens) if output_file else all_tokens
 
 
 ################################################################################
@@ -460,4 +494,4 @@ if __name__ == "__main__":
         sys.exit(1)
 
     # COMPILE input file
-    tokenize(sys.argv[1])
+    tokenize(sys.argv[1], debug=False)

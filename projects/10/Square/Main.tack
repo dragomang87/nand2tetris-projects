@@ -69,7 +69,7 @@
 <keyword> let </keyword>
 <identifier> s </identifier>
 <symbol> = </symbol>
-<stringConst> "string constant" </stringConst>
+<stringConstant> "string constant" </stringConstant>
 <symbol> ; </symbol>
 <keyword> let </keyword>
 <identifier> s </identifier>
@@ -79,12 +79,12 @@
 <keyword> let </keyword>
 <identifier> a </identifier>
 <symbol> [ </symbol>
-<intConst> 1 </intConst>
+<integerConstant> 1 </integerConstant>
 <symbol> ] </symbol>
 <symbol> = </symbol>
 <identifier> a </identifier>
 <symbol> [ </symbol>
-<intConst> 2 </intConst>
+<integerConstant> 2 </integerConstant>
 <symbol> ] </symbol>
 <symbol> ; </symbol>
 <symbol> } </symbol>
@@ -107,7 +107,7 @@
 <symbol> / </symbol>
 <symbol> ( </symbol>
 <symbol> - </symbol>
-<intConst> 2 </intConst>
+<integerConstant> 2 </integerConstant>
 <symbol> ) </symbol>
 <symbol> ; </symbol>
 <keyword> let </keyword>
