@@ -399,7 +399,7 @@ def tokenize(jack_filename, output_file=True, debug=True):
     else:
         # Create an empty context manager if no output file is required
         from contextlib import nullcontext
-        tack = nullcontext
+        tack = nullcontext()
     # Tokenize
     with jack, tack:
         # Things to keep track of
@@ -461,14 +461,15 @@ def tokenize(jack_filename, output_file=True, debug=True):
                 # Classify line tokens
                 tag_tokens = [(classify(token), token, ('line', line_number))
                               for token in line_tokens]
-                if debug: print( f"Tokens   line {line_number}: {tag_tokens}")
+                if debug: print(f"Tokens   line {line_number}: {tag_tokens}")
                 # Collect with previous tokens
                 all_tokens+= tag_tokens
                 # Format tokens in XML
                 xml_tokens = [xml_token(token)  for token in tag_tokens]
-                if debug: print( f"XML tags line {line_number}: {xml_tokens}")
+                if debug: print(f"XML tags line {line_number}: {xml_tokens}")
                 # Write XML formatted tokens to file
-                _          = [tack.write(token) for token in xml_tokens]
+                if output_file:
+                    _      = [tack.write(token) for token in xml_tokens]
             except Exception as e:
                 raise Exception(
                         f"Tokenizing line {line_number} FAILED: {line_tokens}"

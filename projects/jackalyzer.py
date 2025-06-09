@@ -149,10 +149,10 @@ term                : integerConstant
                     | subroutineCall
                     | '(' expression ')'
                     | unaryOp term
-subroutineCall:     subroutineName '(' expressionList )'
+subroutineCall:     subroutineName '(' expressionList ')'
                     | ( className | varName)
                       '.' subroutineName '(' expressionList ')'
-expressionList:     (expression (', expression)* )?
+expressionList:     (expression (',' expression)* )?
 op:                 '+' | '-' | '*' | '/' |
                     '&' | '|' |
                     '<' | '>' | '=' |
@@ -271,8 +271,6 @@ identifier:         letters, digits, and _ not starting with a digit.
 #     This merging is actually explicitly suggested by the course.
 #   - StringConstant is actually stringConstant,
 #     the grammar from the slides has a typo
-#   - We allow trailing comma in 'parameterDef' and 'parameterPass',
-#     this simlifies the grammar
 # There are also some rule changes that stem from the same concept.
 # Whenever there is a list to parse that could be empty,
 # the parser thus needs to look at tokens until it finds a token
@@ -286,8 +284,6 @@ identifier:         letters, digits, and _ not starting with a digit.
 # Therefore the following changes have been made
 #   - Created '[parameterDef]'  merging the parentheses in 'parameterList'
 #     which now becomes '{parameterList}'
-#   - Created '[parameterPass]' merging the parentheses in 'expressionList'
-#     which now becomes '{expressionList}'
 #   - Created '[codeblock(body)]' with body = True, False
 #     merging the curly brackets in subroutineBody and statements
 #     if body = True, then the parser will check for varDec first
@@ -335,7 +331,7 @@ letStatement:       'let' identifier ('[' expression(']') )?
 ifStatement:        'if'    '(' expression(')') code_block(False)
                     ('else'                     code_block(False) )?
 whileStatement:     ‘while' '(' expression(')') code_block(False)
-doStatement:        'do' identifier ('.' identifier)? parameterPass ';'
+doStatement:        'do' identifier ('.' identifier)? '(' expressionList ';'
 returnStatement:    'return' (';'|expression(';'))
 
 
@@ -347,11 +343,10 @@ term                : integerConstant
                     | stringConstant
                     | 'true'|'false'|'null'|'this'
                     | identifier ('[' expression(']') )?
-                    | identifier ('.' identifier)? parameterPass
+                    | identifier ('.' identifier)? '(' expressionList
                     | ('-' | '~')? term
                     | '(' expression(')')
-[parameterPass]:    '(' expressionList ')'
-{expressionList}:   (expression ',')* expression?
+expressionList:     (expression (',' expression)* )? ')'
 (op):               '+' | '-' | '*' | '/' |
                     '&' | '|' |
                     '<' | '>' | '=' |
@@ -380,7 +375,7 @@ identifier
 ###############################################################################
 
 
-def is_jack_type(self, token, void=False):
+def is_jack_type(token, void=False):
     # [type]:       'int' | 'char' | 'boolean' | identifier
     types = ['int', 'char', 'boolean']
     if void:
@@ -388,15 +383,28 @@ def is_jack_type(self, token, void=False):
     return token[1] in types or token[0] == 'identifier'
 
 
-def tree_to_xml(tree):
+XML_SANITIZER = {
+        '>': '&gt;',
+        '<': '&lt;',
+        '&': '&amp;',
+        }
+
+
+def tree_to_xml(tree, spacing=""):
     tag = tree[0]
-    xml = [f"<{tag}>"]
+    xml = [f"{spacing}<{tag}>"]
     from tackenizer import tags
     if tag in tags:
-        xml += [tree[1]]
+        if tree[1] in XML_SANITIZER:
+            token = XML_SANITIZER[tree[1]]
+        else:
+            token = tree[1]
+        xml += [" " + token + " "]
     else:
-        xml += ["\n"] + [tree_to_xml(branch) for branch in tree[1:]]
-    xml = "".join(xml + [f"</{tag}>\n"])
+        xml += ["\n"] + [tree_to_xml(branch, spacing + "  ")
+                         for branch in tree[1:]] + [spacing]
+    xml += [f"</{tag}>\n"]
+    return "".join(xml)
 
 
 class Syntacker():
@@ -407,13 +415,16 @@ class Syntacker():
                  xml     = False,
                  save    = False,
                  strict  = True,
+                 debug   = False,
                  ):
+        # Store the debug setting
+        self.debug = debug
         # Store file basename
         from tackenizer import remove_jack_extension
         self.jack_name = remove_jack_extension(jack_filename)
         # Tokenize first
         from tackenizer import tokenize
-        self.tackens = tokenize(jack_filename, output_file=False)
+        self.tackens = tokenize(jack_filename, output_file=False, debug=False)
         # Position the analyzer at the beginning
         self.index = -1
         # Initialize the statement parser dictionary
@@ -441,7 +452,8 @@ class Syntacker():
         # Reset to beginning
         self.index = -1
         # Parse one class as expected per file
-        self.syntack = self.syntack_class(self.tackens)
+        self.syntack = self.parse_class()
+        if self.debug: print(self.syntack)
         # Check if there is dead code after the class
         if self.index != len(self.tackens):
             if strict:
@@ -451,7 +463,8 @@ class Syntacker():
                         )
             else:
                 from warnings import warn
-                warn(   f"Class terminated but more tokens found: "
+                warn(
+                        f"Class terminated but more tokens found: "
                         f"{self.tackens[self.index:]}"
                         )
 
@@ -539,9 +552,9 @@ class Syntacker():
                         f"(the opening of the class body)"
                         )
             # Parse variable declarations
-            jack_class += self.parse_classVarDec()
+            jack_class += self.parse_classVarDecs()
             # Parse methods and function declarations
-            jack_class += self.parse_subroutineDec()
+            jack_class += self.parse_subroutineDecs()
             # Parse closing bracket
             token = self.next()
             if token[1] == '}':
@@ -556,7 +569,7 @@ class Syntacker():
             raise SyntaxError(
                     f"Run out of tokens parsing 'class' {jack_class}"
                     )
-
+        self.index += 1
         return jack_class
 
     def parse_classVarDecs(self):
@@ -571,11 +584,12 @@ class Syntacker():
                 self.back()
                 break
             # If variable declaration then parse variables
-            jack_class_variable   = ('classVarDec', token)
+            jack_class_variable = ('classVarDec', token)
             # Use helper function shared with subroutine variable declaration
-            jack_class_variable  += self.parse_variable_list()
+            jack_class_variable += self.parse_variable_list()
             # Add the variable declaration to the list
             jack_class_variables += (jack_class_variable,)
+        return jack_class_variables
 
     ###########################################################################
 
@@ -622,9 +636,9 @@ class Syntacker():
                         f"{jack_class_subroutine}"
                         )
             # Parse parameter list with parenthesis
-            jack_class_subroutine  += self.parse_parameterDef()
+            jack_class_subroutine += self.parse_parameterDef()
             # Parse subroutineBody
-            jack_class_subroutine  += (self.parse_codeblock(body=True),)
+            jack_class_subroutine += (self.parse_codeblock(body=True),)
             # Add the subroutine declaration to the list
             jack_class_subroutines += (jack_class_subroutine,)
         return jack_class_subroutines
@@ -688,6 +702,7 @@ class Syntacker():
                     f"in subroutine declaration"
                     f"{jack_parameters}"
                     )
+        return jack_parameters
 
     def parse_varDecs(self):
         # varDec:       'var' type identifier (',' identifier)* ';'
@@ -701,13 +716,14 @@ class Syntacker():
                 self.back()
                 break
             # If variable declaration then parse variables
-            jack_class_variable   = ('varDec', token)
+            jack_class_variable = ('varDec', token)
             # Use helper function shared with class variable declaration
-            jack_class_variable  += self.parse_variable_list()
+            jack_class_variable += self.parse_variable_list()
             # Add the variable declaration to the list
             jack_class_variables += (jack_class_variable,)
+        return jack_class_variables
 
-    def parse_variable_list(self, declaration):
+    def parse_variable_list(self):
         # Helper parser for classVarDec and varDec:
         #   type identifier (',' identifier)* ';'
         declaration = ()
@@ -786,7 +802,7 @@ class Syntacker():
     # ifStatement:      'if'    '(' expression ')' codeblock[False]
     #                   ('else'                    codeblock[False] )?
     # whileStatement:   ‘while' '(' expression ')' codeblock[False]
-    # doStatement:      'do' identifier ('.' identifier)? '(' parameterPass ';'
+    # doStatement:      'do' identifier ('.' identifier)? '(' expressionList ';'
     # returnStatement:  'return' expression? ';'
     #
 
@@ -795,8 +811,8 @@ class Syntacker():
         #                codeblock(True)
         # [codeblock(body)]:
         #                '{'
-        #                    varDec* if body=True
-        #                         statements
+        #                   varDec* if body=True
+        #                   statements
         #                '}'
         # {statements}:  ( letStatement
         #                | ifStatement
@@ -821,24 +837,25 @@ class Syntacker():
         jack_statements = ('statements',)
         while True:
             token = self.next()
-            if token[1] in self.STATEMENT:
+            if token[1] in self.STATEMENTS:
                 jack_statement   = (token[1] + 'Statement', token)
-                jack_statement  += self.STATEMENT[token[1]]()
+                jack_statement  += self.STATEMENTS[token[1]]()
                 jack_statements += (jack_statement,)
             else:
                 break
+        jack_codeblock += (jack_statements,)
         # Parse closing bracket
         if token[1] == '}':
             jack_codeblock += (token,)
         else:
             raise SyntaxError(
                     f"FAIL parsing token {token}: "
-                    f"statements not closed by ""} "
+                    f"statements (codeblock) not closed by ""} "
                     f"in {jack_codeblock}"
                     )
         # If subroutineBody then add the tag
         if body:
-            return ('subroutineBody', jack_codeblock)
+            return ('subroutineBody',) + jack_codeblock
         else:
             return jack_codeblock
 
@@ -912,13 +929,13 @@ class Syntacker():
                     f"in while statement {statement}"
                     )
         # Parse expression
-        statement += self.parse_parameterPass(),
+        statement += self.parse_expression()
         # Parse codeblock
         return statement + self.parse_codeblock()
 
     def parse_do(self):
         # doStatement:   'do' identifier ('.' identifier)?
-        #                     '(' parameterPass ';'
+        #                     '(' expressionList ';'
         # Parse identifier
         token = self.next()
         if token[0] != 'identifier':
@@ -934,7 +951,7 @@ class Syntacker():
         if token[1] == '.':
             statement += (token,)
             token = self.next()
-            if token[1] == 'identifier':
+            if token[0] == 'identifier':
                 statement += (token,)
             else:
                 raise SyntaxError(
@@ -955,7 +972,20 @@ class Syntacker():
                     f"(the opening of the subroutine parameters) "
                     f"in do statement {statement}"
                     )
-        return statement + self.parse_parameterPass()
+        # Parse arguments
+        statement += self.parse_expressionList()
+        # Parse closing ;
+        token = self.next()
+        if token[1] == ';':
+            statement += (token,)
+        else:
+            raise SyntaxError(
+                    f"FAIL parsing token {token}: "
+                    f"subroutine call not followed by ; "
+                    f"(the termination of the statement) "
+                    f"in do statement {statement}"
+                    )
+        return statement
 
     def parse_return(self):
         # returnStatement:'return' expression? ';'
@@ -978,14 +1008,13 @@ class Syntacker():
     #                   | stringConstant
     #                   | 'true'|'false'|'null'|'this'
     #                   | identifier ('[' expression ']')?
-    #                   | identifier ('.' identifier)? '(' parameterPass
+    #                   | identifier ('.' identifier)? '(' expressionList
     #                   | subroutineCall
     #                   | ('-' | '~')? term
     #                   | '(' expression ')'
-    # [parameterPass]:  expressionList ')'
-    # {expressionList}: (expression ',')* expression?
+    # expressionList:   (expression (',' expression)* )? ')'
 
-    def parse_expression(self, end=')', expressionList=False):
+    def parse_expression(self, end=')'):
         # expression[end]   term (op term)* end
         # term              : integerConstant
         #                   | stringConstant
@@ -993,7 +1022,7 @@ class Syntacker():
         #                   | ('-' | '~')? term
         #                   | '(' expression ')'
         #                   | identifier ('[' expression ']')?
-        #                   | identifier ('.' identifier)? '(' parameterPass
+        #                   | identifier ('.' identifier)? '(' expressionList
         # op:               '+' | '-' | '*' | '/' |
         #                   '&' | '|' |
         #                   '<' | '>' | '=' |
@@ -1001,91 +1030,17 @@ class Syntacker():
         # Start expression
         expression = ('expression', )
         while True:
-            term = ('term',)
-            token = self.next()
-            # Parse constants
-            if token[0] in ['integerConstant', 'stringConstant'] or \
-               token[1] in ['true', 'false', 'null', 'this']:
-                return term + (token,)
-            # Parse unary operators
-            if token[1] in ['-', '~']:
-                return term + (token,) + (self.parse_term(),)
-            # Parse term expression
-            if token[1] in ['(']:
-                return term + (token,) + (self.parse_expression(),)
-            # Parse identifiers
-            if token[0] != 'identifier':
-                raise SyntaxError(
-                        f"FAIL parsing token {token}: "
-                        f"token does not start a term, "
-                        f"expecting a constant, an identifier, "
-                        f"-, ~, (, null or this"
-                        )
-            # From this point on we know we have an identifier, either
-            #   - variable
-            #   - array
-            #   - class with method call
-            #   - function call
-            term += (token,)
-            token = self.next()
-            # Parse function call
-            if token[1] == '(':
-                return term + (token,) + self.parse_parameterPass()
-            # Parse array
-            if token[1] == '[':
-                return term + (token,) + self.parse_expression(end=']')
-            # Parse class.method call
-            if token[1] == '.':
-                term += (token,)
-                # Parse method identifier
-                token = self.next()
-                if token[1] == 'identifier':
-                    term += (token,)
-                else:
-                    raise SyntaxError(
-                            f"FAIL parsing token {token}: "
-                            f"subroutine name contains a . "
-                            f"but it is not followed by an identifier"
-                            f"(the name of the method) "
-                            f"in subroutine call"
-                            )
-                # Parse opening (
-                token = self.next()
-                if token[1] == '(':
-                    return term + (token,) + self.parse_parameterPass()
-                else:
-                    raise SyntaxError(
-                            f"FAIL parsing token {token}: "
-                            f"class.method not followed by ( "
-                            f"(opening the parameters passed to the method) "
-                            f"in subroutine call"
-                            )
-            # Otherwise we assume it is just a variable
-            # and the term has ended
-            expression += (term,)
+            # Parse term
+            expression += (self.parse_term(),)
             # Check for operator
+            token = self.next()
             if token[1] in ops:
                 expression += (token,)
             else:
                 break
-        # If more = True then we are parsing
-        # an expression in an expression list
-        if expressionList:
-            # Check if there could be another expression after ,
-            if token[1] == ',':
-                return ((expression, token), True)
-            # If no comma then there must be a closing )
-            # (since we are here because the expression ended)
-            if token[1] == ')':
-                return ((expression, token), False)
-            # If neither , or ) are found then there is a syntax error
-            raise SyntaxError(
-                    f"FAIL parsing token {token}: "
-                    f"expression not followed by , or ) "
-                    f"in expression list"
-                    )
-        # If we are here then more = False
+        # If we are here then we are not in an expressionList
         # and we are parsing a single expression
+        # Possible termination:
         #   - array:
         #       '[' expression ']'
         #   - return and let assignment:
@@ -1101,31 +1056,125 @@ class Syntacker():
                     f"after expression {expression}"
                     )
 
-    def parse_parameterPass(self):
-        # [parameterPass]:   expressionList ')'
-        # {expressionList}:  (expression ',')* expression?
+    def parse_expressionList(self):
+        # expressionList:  (expression? (',' expression)*)?
         # Actual implementation
-        # [parameterPass]:   (expressionList ',')* expression ')'
+        # expressionList:   expressionList ')'
         jack_list = ('expressionList',)
+        token = self.next()
+        if token[1] == ')':
+            return (jack_list, token)
         # Parse parameters
-        more = True
-        while more:
-            expression, more = self.parse_expression(expressionList=True)
-            if more:
-                jack_list += expression
+        self.back()
+        ops = ['+', '-', '*', '/', '&', '|', '<', '>', '=']
+        while True:
+            # Start expression
+            expression = ('expression', )
+            while True:
+                # Parse term
+                expression += (self.parse_term(),)
+                # Check for operator
+                # exit if missing, continue if present
+                token = self.next()
+                if token[1] in ops:
+                    expression += (token,)
+                else:
+                    break
+            # Add expression to the list
+            jack_list += (expression, )
+            # Check if there could be another expression after ,
+            if token[1] == ',':
+                jack_list += (token, )
             else:
-                jack_list += expression[0]
-                return (jack_list, expression[1])
-        # Parse closing )
-        # if token[1] == ')':
-        #     return  (jack_list, token)
-        # else:
-        #     raise SyntaxError(
-        #             f"FAIL parsing token {token}: "
-        #             f"subroutine parameters not closed by ) "
-        #             f"in subroutine declaration"
-        #             f"{jack_class_subroutine}"
-        #             )
+                break
+        # If no comma then there must be a closing )
+        # (since the expression ended)
+        if token[1] == ')':
+            return (jack_list, token)
+        # If neither , or ) are found then there is a syntax error
+        raise SyntaxError(
+                f"FAIL parsing token {token}: "
+                f"expression not followed by , or ) "
+                f"in expressionList {jack_list}"
+                )
+
+    def parse_term(self, ):
+        # term              : integerConstant
+        #                   | stringConstant
+        #                   | 'true'|'false'|'null'|'this'
+        #                   | ('-' | '~')? term
+        #                   | '(' expression ')'
+        #                   | identifier ('[' expression ']')?
+        #                   | identifier ('.' identifier)? '(' expressionList
+        # Terms can be followed by:
+        #   - op (expression)
+        #   - )  (term and subroutine call)
+        #   - ]  (term)
+        #   - ;  (let and return)
+        #   - ,  (expressionList)
+        # Start expression
+        token = self.next()
+        # Parse constants
+        if token[0] in ['integerConstant', 'stringConstant'] or \
+           token[1] in ['true', 'false', 'null', 'this']:
+            return ('term', token,)
+        # Parse unary operators
+        if token[1] in ['-', '~']:
+            return ('term', token, self.parse_term(),)
+        # Parse term expression
+        if token[1] in ['(']:
+            return ('term', token, ) + self.parse_expression()
+        # Parse identifiers
+        if token[0] != 'identifier':
+            raise SyntaxError(
+                    f"FAIL parsing token {token}: "
+                    f"token does not start a term, "
+                    f"expecting a constant, an identifier, "
+                    f"-, ~, (, null or this"
+                    )
+        # From this point on we know we have an identifier, either
+        #   - variable
+        #   - array
+        #   - class with method call
+        #   - function call
+        term = ('term', token,)
+        token = self.next()
+        # Parse function call
+        if token[1] == '(':
+            return term + (token,) + self.parse_expressionList()
+        # Parse array
+        if token[1] == '[':
+            return term + (token,) + self.parse_expression(end=']')
+        # Parse class.method call
+        if token[1] == '.':
+            term += (token,)
+            # Parse method identifier
+            token = self.next()
+            if token[0] == 'identifier':
+                term += (token,)
+            else:
+                raise SyntaxError(
+                        f"FAIL parsing token {token}: "
+                        f"<class>. not followed by an identifier"
+                        f"(the name of the method) "
+                        f"in subroutine call {term}"
+                        )
+            # Parse opening (
+            token = self.next()
+            if token[1] == '(':
+                return term + (token,) + self.parse_expressionList()
+            else:
+                raise SyntaxError(
+                        f"FAIL parsing token {token}: "
+                        f"<class>.<method> not followed by ( "
+                        f"(opening the parameters passed to the method) "
+                        f"in subroutine call {term}"
+                        )
+        # Return identifier
+        # if everything else fails we just have an identifier
+        self.back()
+        return term
+
 
 # class Syntacker END
 #   __init__(self,
@@ -1153,6 +1202,8 @@ if __name__ == "__main__":
             file=sys.stderr
             )
         sys.exit(1)
+    jack_file = sys.argv[1]
 
     # COMPILE input file
-    Syntacker(sys.argv[1], save=True)
+    print(f"Tockenizing and analyzing Jack file {jack_file}")
+    Syntacker(jack_file, save=True)
