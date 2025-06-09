@@ -1,0 +1,43 @@
+PART I
+Start    : 21st December 2023
+Module 1 : 21st December 2023
+Module 2 : 21st December 2023
+Module 3 : 22nd December 2023
+Module 4 : 23rd December 2023
+Module 4 : finish 24th December 2023
+Module 5 : start 24th December 2023
+Module 5 : finish 25th December 2023
+Module 6 : 27th December 2023
+
+PART II
+Module 7 :
+    start ?, had a look in back in December 2024 after PART I
+    picked up again after long break in end March 2024
+    started coding vmacker.py on 03 April 2024
+    first running implementation 10 April 2024
+    end 20 April 2024
+Module 8 :
+    start 12 April 2024
+    end   25 April 2024
+Module 9 :
+    start 25 April 2024
+    assignment is to design and develop an application, will skip and do the other modules first
+    end watching 26 April 2024
+Module 10:
+    start 26 April 2024, started on the tokenizer
+    03 May 2024 finished tokenizer
+    26 May 2024 finished analyzer, took many days of break in between
+Module 11:
+Module 12:
+Module 13:
+    just some videos with closing remarks
+    26 April 2024
+
+
+Software Developer Skills:
+    Software Architecture
+    Software Design
+    Software Design Patterns
+
+Polling vs Interrupts
+https://electronics.stackexchange.com/questions/591859/how-does-programmed-io-vs-interrupt-driven-io-work
