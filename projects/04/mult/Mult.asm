@@ -7,25 +7,44 @@
 // Pseudo code smart
 //   go thorugh the bits of R1
 //   R1 & 2^i with i = 0..15
-//   compute the powers to the ^{2^i} by taking the product with itself
-//   sum this power if the corresponding bit of R1 is 1
+//   compute the multiples by {2^i} by taking the sum with itself
+//   sum this multiple if the corresponding bit of R1 is 1
 //
 // Pseudo code dumb
 //   sum R0 to the result R1 times with a counter from R1 to zero
 
+// set up a temporary variable to store the product
+@product
+M = 0
+
+///////////////////////////////////////
+// ZERO MULTIPLICATION
+///////////////////////////////////////
+
+@R0
+D = M
+@SAVE
+D; JEQ
+@R1
+D = M
+@SAVE
+D; JEQ
+
+
+///////////////////////////////////////
+// NON-ZERO MULTIPLICATION
+///////////////////////////////////////
 
 // Choose Implementation
 @OBVIOUS
 @SMART
 0; JMP
 
-
-
-
 ///////////////////////////////////////
 // DUMB MULTIPLICATION
 ///////////////////////////////////////
 
+// Sum R0 to itself R1 number of times
 
 (OBVIOUS)
     // Make a copy of R1 that will count how many times we summed R0
@@ -59,55 +78,60 @@
 // SMART MULTIPLICATION
 ///////////////////////////////////////
 
+// Sum the power-of-2 multiples of R0
+// when the non-zero bits of R1 are encountered
+// Remove the multiples as they are used to stop early for small numbers
+
 (SMART)
-    // set up a temporary variable to store the product
-    @product
-    M = 0
-    // set up the counter at 1 and the bitstring with first bit 1
-    @i_counter
+    // Set up the bit selector at the first bit
+    @bit_selector
     M = 1
-    @i_bit
-    M = 1
-    // store the first power equal to R0
+    // store the first multiple equal to R0
     @R0
     D = M
-    @power
+    @R0_multiple
+    M = D
+    // set up the counter at R1
+    @R1
+    D = M
+    @R1_counter
     M = D
 
 (SMART_LOOP)
-    // check if the selected i-th bit is equal to 1
-    @i_bit
+    // check if the selected bit is equal to 1
+    @bit_selector
     D = M
-    @R1
+    @R1_counter
     D = M & D
     // If zero skip the sum
     @SKIP_SUM
     D; JEQ
-        // If non zero, add the power to product
-        @power
+        // If non zero, add the multiple to product
+        @R0_multiple
         D = M
         @product
         M = M + D
+        // Remove the selected bit from the counter
+        @bit_selector
+        D = M
+        @R1_counter
+        MD = M - D        
+        // Done if this was the last bit of R1_counter
+        // Thus save if R1_counter is now zero
+        @SAVE
+        D; JEQ
     (SKIP_SUM)
-    // double the power variable
-    @power
+    // If we are here then R1_counter is still not zero
+    // Double the multiple variable
+    @R0_multiple
     D = M
     M = M + D
-    // shift the bit up
-    @i_bit
+    // Doube the bit selector (shift up)
+    @bit_selector
     D = M
     M = M + D
-    // increase the counter
-    @i_counter
-    M = M + 1
-    // if counter is not 16 then repeat
-    D = M
-    @16
-    D = D - A
-    // repeat if not 16th bit
+    // repeat
     @SMART_LOOP
-    D; JNE
-    @SAVE
     0; JMP
 
 
