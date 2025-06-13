@@ -85,11 +85,11 @@ if __name__ == "__main__":
     print(vm_files, vm_folders)
 
     # COMPILE INPUT FILES
-    for file   in vm_files:
+    for vm_file in vm_files:
         # Reset compiler
         vmacker.reset_compiler_variables()
         # Compile
-        vmacker.compile_vm_to_asm(vm_filename)
+        vmacker.compile_vm_to_asm(vm_file)
 
     # COMPILE INPUT FOLDERS
     for folder in vm_folders:
