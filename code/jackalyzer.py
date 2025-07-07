@@ -414,9 +414,11 @@ class Syntacker():
                  analyze = False,
                  xml     = False,
                  save    = False,
+                 submission = False,
                  strict  = True,
                  debug   = False,
                  ):
+        self.submission = submission
         # Store the debug setting
         self.debug = debug
         # Store file basename
@@ -424,7 +426,7 @@ class Syntacker():
         self.jack_name = remove_jack_extension(jack_filename)
         # Tokenize first
         from tackenizer import tokenize
-        self.tackens = tokenize(jack_filename, output_file=False, debug=False)
+        self.tackens, _ = tokenize(jack_filename, output_file=save, submission=submission, debug=False)
         # Position the analyzer at the beginning
         self.index = -1
         # Initialize the statement parser dictionary
@@ -440,7 +442,7 @@ class Syntacker():
         self.jaxml   = None
         # Analyze if requested
         if analyze:
-            self.syntack = self.analyze(self.tackens)
+            self.analyze(self.tackens)
         # Produce xml if requested
         if xml:
             self.make_xml()
@@ -476,8 +478,10 @@ class Syntacker():
     def save_xml(self):
         if self.jaxml is None:
             self.make_xml()
-        with open(self.jack_name + ".jaxml", 'w') as xml:
+        save_name = self.jack_name + (".xml" if self.submission else ".jaxml")
+        with open(save_name, 'w') as xml:
             xml.write(self.jaxml)
+        print(f"Saved file {save_name}")
 
     def next(self):
         self.index += 1
@@ -1187,7 +1191,7 @@ class Syntacker():
 
 
 ###############################################################################
-# JACK TOKENIZER SCRIPT
+# JACK ANALYZER SCRIPT
 ###############################################################################
 
 if __name__ == "__main__":
@@ -1202,8 +1206,40 @@ if __name__ == "__main__":
             file=sys.stderr
             )
         sys.exit(1)
-    jack_file = sys.argv[1]
 
-    # COMPILE input file
-    print(f"Tockenizing and analyzing Jack file {jack_file}")
-    Syntacker(jack_file, save=True)
+    # DISTINGUISH CALL NAME
+    # The submission asks to produce .xml files but also provides .xml files
+    # By default the tockenizer and analyzer do not use .xml extension
+    # unless the analyzer is called with the submission name (JackAnalyzer.py)
+    # instead of the original filename jackalizer.py
+    submission = True if sys.argv[0] == "JackAnalyzer.py" else False
+    print("Analyzing for submission: ", submission)
+    arguments = sys.argv[1:]
+
+    import os
+
+    # GET INPUT FILES
+    jack_files     = [arg for arg in arguments if os.path.isfile(arg)]
+
+    # GET INPUT FOLDERS
+    jack_folders   = [arg for arg in arguments if os.path.isdir (arg)]
+    # Remove trailing / from folders, otherwise .basename() returns ""
+    clean_folder = lambda folder: folder[:-1] if folder[-1] == "/" else folder
+    jack_folders   = [clean_folder(folder) for folder in jack_folders]
+    print("files:", jack_files, "folders:", jack_folders)
+
+    # COMPILE INPUT FILES
+    for jack_file in jack_files:
+        print(f"Tockenizing and analyzing Jack file {jack_file}")
+        Syntacker(jack_file, submission=submission, save=True)
+
+    # COMPILE INPUT FOLDERS
+    for folder in jack_folders:
+        # Find all .jack files in folder
+        import glob
+        jack_files = glob.glob(f"{folder}/*.jack")
+        # Analyze all files
+        # (the compiler function returns the output filename)
+        for jack_file in jack_files:
+            print(f"Tockenizing and analyzing Jack file {jack_file}")
+            Syntacker(jack_file, submission=submission, save=True)

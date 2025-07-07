@@ -1,4 +1,3 @@
-<tokens>
 <keyword> class </keyword>
 <identifier> Main </identifier>
 <symbol> { </symbol>
@@ -70,7 +69,7 @@
 <keyword> let </keyword>
 <identifier> s </identifier>
 <symbol> = </symbol>
-<stringConstant> string constant </stringConstant>
+<stringConstant> "string constant" </stringConstant>
 <symbol> ; </symbol>
 <keyword> let </keyword>
 <identifier> s </identifier>
@@ -123,4 +122,3 @@
 <symbol> ; </symbol>
 <symbol> } </symbol>
 <symbol> } </symbol>
-</tokens>

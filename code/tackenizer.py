@@ -106,6 +106,8 @@ TOKENS = {token: tag for tag in TAGS for token in TAGS[tag]}
 # by removing all the valid symbols
 # and checking for the empty string
 # The following is the translator to make this removal
+# Python >= 3.9
+'''
 identifier_eraser = ( # map ASCII codes to empty string
         # digits     ['0','9'] = [48, 57[
         {code: "" for code in range(ord('0'), ord('9') + 1)} |
@@ -116,6 +118,22 @@ identifier_eraser = ( # map ASCII codes to empty string
         # underscore
         {ord('_'): ""}
         )
+'''
+# Python >= 3.9
+identifier_eraser = ( # map ASCII codes to empty string
+        {code: "" for code in [
+            # digits     ['0','9'] = [48, 57[
+            *range(ord('0'), ord('9') + 1),
+            # uppercase  ['A','Z'] = [65, 91[
+            *range(ord('A'), ord('Z') + 1),
+            # lowercase  ['a','z'] = [97,123[
+            *range(ord('a'), ord('z') + 1),
+            # underscore
+            ord('_'),
+            ]
+         }
+        )
+
 
 def classify(token):
     # We assume tokens have been isolated by the previous process
@@ -281,7 +299,7 @@ def separate_line(line):
             try:
                 token, line = TOKEN_SEPARATOR[line[0]](line)
             except IndexError as e:
-                raise("{line}: string missing end quote \"") from e
+                raise(f"{line}: string missing end quote \"") from e
             tokens += [token]
             continue
         # In all other case separate until next space
@@ -385,21 +403,23 @@ xml_token = lambda token: (
         f"<{token[0]}> {token[1]} </{token[0]}>\n"
         )
 
-def tokenize(jack_filename, output_file=True, debug=True):
+def tokenize(jack_filename, output_file=True, submission=False, debug=True):
     # Open input  file
     jack = open(jack_filename, 'r')
     if debug: print(f"Tokenizing file {jack_filename}")
     # Open output file if requested
     if output_file:
+        extension= "T.xml" if submission else ".tack"
         # Get output filename
-        tack_filename = remove_jack_extension(jack_filename) + ".tack"
+        tack_filename = remove_jack_extension(jack_filename) + extension
         # Open the file
         tack = open(tack_filename, 'w')
-        if debug: print(f"Saving tokens to {tack_filename}")
+        print(f"Saving tokens to {tack_filename}")
     else:
         # Create an empty context manager if no output file is required
         from contextlib import nullcontext
         tack = nullcontext()
+        tack_filename = None
     # Tokenize
     with jack, tack:
         # Things to keep track of
@@ -459,8 +479,12 @@ def tokenize(jack_filename, output_file=True, debug=True):
             if debug: print(f"Tokenizing line {line_number}: {line_tokens}")
             try:
                 # Classify line tokens
-                tag_tokens = [(classify(token), token, ('line', line_number))
-                              for token in line_tokens]
+                if submission:
+                    tag_tokens = [(classify(token), token.replace('"',''), ('line', line_number))
+                                  for token in line_tokens]
+                else:
+                    tag_tokens = [(classify(token), token, ('line', line_number))
+                                  for token in line_tokens]
                 if debug: print(f"Tokens   line {line_number}: {tag_tokens}")
                 # Collect with previous tokens
                 all_tokens+= tag_tokens
@@ -474,7 +498,7 @@ def tokenize(jack_filename, output_file=True, debug=True):
                 raise Exception(
                         f"Tokenizing line {line_number} FAILED: {line_tokens}"
                     ) from e
-    return (tack_filename, all_tokens) if output_file else all_tokens
+    return (all_tokens, tack_filename)
 
 
 ################################################################################
